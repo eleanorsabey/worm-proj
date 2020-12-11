@@ -225,3 +225,30 @@ raw <- NormalizeData(raw0)
 final <- seurat_object[["integrated"]]@data
 
 raw1 <- NormalizeData(raw)
+og <- seurat_object@active.ident
+DimPlot(object = seurat_object, cells = c, reduction = 'umap')
+FeaturePlot(object = seurat_object, cells = c, features = 'Smp-067060')
+?FeaturePlot
+?DimPlot
+ogdf <- data.frame(og)
+library(data.table)
+setDT(ogdf, keep.rownames = TRUE)[]
+colnames(ogdf) <- c("cell", "tissue")
+ogdf$tissue <- as.factor(ogdf$tissue)
+library(dplyr)
+d <- filter(ogdf, ogdf$tissue == "oesophageal gland")
+c <- d$cell
+
+MEGs <- read.csv("MEGs.csv")
+colnames(MEGs) <- c("name", "ID")
+num0 <- 1:37
+library(ggplot2)
+for (i in num0){
+  #a <- MEGs$ID[i]
+  png(paste("m", i, ".png", sep = ''), width = 550, height = 350)
+  plot(FeaturePlot(object = seurat_object, cells = c, features = MEGs$ID[i]) +  
+                                         labs(title = paste(MEGs$name[i],"\n", MEGs$ID[i]))+
+                                         theme(plot.title = element_text(size=10)))
+  dev.off()
+}
+
