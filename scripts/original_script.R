@@ -1,4 +1,5 @@
 setwd("E:/project/scripts")
+invisible(utils::memory.limit(50000))
 # Load Seurat into R
 library(Seurat)
 
@@ -252,3 +253,15 @@ for (i in num0){
   dev.off()
 }
 
+rm(d)
+rm(og)
+rm(ogdf)
+
+#extract top 10 identifiers for OG cluster
+cluster1.markers <- FindMarkers(seurat_object, ident.1 = c, min.pct = 0.25)
+head(cluster1.markers, n = 10)
+int <- seurat_object@assays[["integrated"]]
+rm(seurat_object)
+
+so1 <- SubsetData(object = seurat_object, assay = "integrated")
+pbmc1
