@@ -13,15 +13,15 @@ seurat_object
 DimPlot(seurat_object, reduction="umap")
 
 
-
 #load gene of interest list table in and adjust col names
-genes <- read.csv(file="gene list MASTER.csv")
+genes <- read.csv(file="gene list MASTER v2.csv")
 names(genes) <- c("type", "protein", "gene_ID", "table", "tableName", "tableID", "stableID", "GeneName", "GeneDescription", "ignore")
 
 #split the genes dataframe by which table in Alan's paper they came from
 features1 <- subset(genes, genes$table==1)
 features2 <- subset(genes, genes$table==2)
 features3 <- subset(genes, genes$table==3)
+#combine 2 and 3
 features23 <- rbind(features2, features3)
 features4 <- subset(genes, genes$table==4)
 features5 <- subset(genes, genes$table==5)
@@ -49,10 +49,7 @@ for (n in num){
   
 }
 
-n14 <- FeaturePlot(object = seurat_object, features = 'Smp-313560') +
-  labs(title = 'Alkaline phosphatase Smp-313560') +
-  theme(plot.title = element_text(size=15))
-plot(n14)
+
 #violin plots to produce indivual plot for each gene
 for(g in genes$gene_ID){
       png(sprintf("%s.png", , width = 850, height = 500)  
@@ -80,83 +77,122 @@ for (i in num){
 }
 
 plot(v1)
-#loop for heatmap plots
-#  num <- 1: 100 
-# for (i in num){
-#      #a <- genes$gene_ID[i]
-#      #png(sprintf("%s.png", a), width = 550, height = 350)
-#      plot(FeaturePlot(seurat_object, features = genes$gene_ID[i]) +  
-#      labs(title = paste(genes$protein[i],genes$gene_ID[i])))
-#      #dev.off()
-# }
 
- num <- 1: 100
+library(ggplot2)
+library(ggpubr)
 
-
+####### plots for table 1
+num <- 1: 10
 for (i in num){
    #a <- features1$gene_ID[i]
    #png(sprintf("%s.png", a), width = 550, height = 350)
-   assign(paste("p", i, sep = ''), plot(FeaturePlot(seurat_object, features = genes$gene_ID[i]) +  
-                labs(title = paste(genes$protein[i],"\n", genes$gene_ID[i]))+
-                theme(plot.title = element_text(size=8))))
+   assign(paste("Tone", i, sep = ''), FeaturePlot(seurat_object, features = features1$gene_ID[i]) +  
+                labs(title = paste(features1$protein[i],"\n", features1$gene_ID[i]))+
+                theme(plot.title = element_text(size=8)))
    #dev.off()
 }
 
- table2anew <- ggarrange(p8,  p9,  p10, p11, p12, p13, n14, p15, p16, ncol = 3, nrow = 3)
- 
-library(ggpubr)
-table1 <- ggarrange(p1, p2, p3, p4, p5, p6, p7,ncol = 3, nrow = 3) 
-table2a <- ggarrange(p8,  p9,  p10, p11, p12, p13, p14, p15, p16, ncol = 3, nrow = 3)
-table2b <- ggarrange(p17, p18, p19, p20, p21, p22, p23, p24, p25, ncol = 3, nrow = 3)
-table2c <- ggarrange(p26, p28, p29, p30, p31, p32, p33, p34, p35, ncol = 3, nrow =3)
-table2d <- ggarrange(p36, p38, p39, p40, p41, p42, p43, p44, p45,ncol = 3, nrow =3)
-table2e <- ggarrange(p46, p51, p52, p53, p54, p55, p56, p57, p58,ncol = 3, nrow =3)
-table2f <- ggarrange(p59, p60, p61, p62, p27, p37, p47, p48, p49,ncol = 3, nrow =3)
-table2g <- ggarrange(p50, p63, p64, p65, p66, p67, p68, p69,ncol = 3, nrow =3)
-table4a <- ggarrange(p70, p71, p72, p73, p74, p75, p76, p77, p78,ncol = 3, nrow =3)
-table4b <- ggarrange(p79, p80, p81, p82, p83, p84, p85, p86, p87,ncol = 3, nrow =3)
-table4c <- ggarrange(p88, p89, p90, p91, p92,ncol = 3, nrow =3)
-table5 <- ggarrange(p93,  p94,  p95,  p96,  p97,  p98,  p99,  p100,ncol = 3, nrow =3)
+table1 <- ggarrange(Tone1, Tone2, Tone3, Tone4, Tone5, Tone6, Tone7, Tone8, Tone9, Tone10, ncol=3, nrow=3)
+png("table1aUMAPs.png", width = 700, height = 700)
+plot(table1$`1`)
+dev.off()
+png("table1bUMAPs.png", width = 700, height = 700)
+plot(table1$`2`)
+dev.off()
 
-png("table 1.png", width = 700, height = 700)
-plot(table1)
+
+########## plots for table 2/3
+num <- 1:66
+for (i in num){
+  #a <- features1$gene_ID[i]
+  #png(sprintf("%s.png", a), width = 550, height = 350)
+  assign(paste("Ttwo", i, sep = ''), FeaturePlot(seurat_object, features = features23$gene_ID[i]) +  
+                                            labs(title = paste(features23$protein[i],"\n", features23$gene_ID[i]))+
+                                            theme(plot.title = element_text(size=8)))
+  #dev.off()
+}
+
+print(noquote(paste("Ttwo", 1:66, sep = '')))
+table2 <- ggarrange(Ttwo1,  Ttwo2,  Ttwo3,  Ttwo4,  Ttwo5,  Ttwo6,  Ttwo7,  Ttwo8,  Ttwo9,  Ttwo10, 
+                    Ttwo11, Ttwo12, Ttwo13, Ttwo14, Ttwo15, Ttwo16, Ttwo17, Ttwo18, Ttwo19, Ttwo20,
+                    Ttwo21, Ttwo22, Ttwo23, Ttwo24, Ttwo25, Ttwo26, Ttwo27, Ttwo28, Ttwo29, Ttwo30,
+                    Ttwo31, Ttwo32, Ttwo33, Ttwo34, Ttwo35, Ttwo36, Ttwo37, Ttwo38, Ttwo39, Ttwo40,
+                    Ttwo41, Ttwo42, Ttwo43, Ttwo44, Ttwo45, Ttwo46, Ttwo47, Ttwo48, Ttwo49, Ttwo50,
+                    Ttwo51, Ttwo52, Ttwo53, Ttwo54, Ttwo55, Ttwo56, Ttwo57, Ttwo58, Ttwo59, Ttwo60,
+                    Ttwo61, Ttwo62, Ttwo63, Ttwo64, Ttwo65, Ttwo66, ncol=3, nrow=3)
+
+png("table2aUMAPs.png", width = 700, height = 700)
+plot(table2$`1`)
 dev.off()
-png("table 2a.png", width = 700, height = 700)
-plot(table2a)
+png("table2bUMAPs.png", width = 700, height = 700)
+plot(table2$`2`)
 dev.off()
-png("table 2b.png", width = 700, height = 700)
-plot(table2b)
+png("table2cUMAPs.png", width = 700, height = 700)
+plot(table2$`3`)
 dev.off()
-png("table 2c.png", width = 700, height = 700)
-plot(table2c)
+png("table2dUMAPs.png", width = 700, height = 700)
+plot(table2$`4`)
 dev.off()
-png("table 2d.png", width = 700, height = 700)
-plot(table2d)
+png("table2eUMAPs.png", width = 700, height = 700)
+plot(table2$`5`)
 dev.off()
-png("table 2e.png", width = 700, height = 700)
-plot(table2e)
+png("table2fUMAPs.png", width = 700, height = 700)
+plot(table2$`6`)
 dev.off()
-png("table 2f.png", width = 700, height = 700)
-plot(table2f)
+png("table2gUMAPs.png", width = 700, height = 700)
+plot(table2$`7`)
 dev.off()
-png("table 2g.png", width = 700, height = 700)
-plot(table2g)
+png("table2hUMAPs.png", width = 700, height = 700)
+plot(table2$`8`)
 dev.off()
-png("table 4a.png", width = 700, height = 700)
-plot(table4a)
+
+######### plots for table 4
+num <- 1: 24
+for (i in num){
+  #a <- features1$gene_ID[i]
+  #png(sprintf("%s.png", a), width = 550, height = 350)
+  assign(paste("Tfour", i, sep = ''), FeaturePlot(seurat_object, features = features4$gene_ID[i]) +  
+                                            labs(title = paste(features4$protein[i],"\n", features4$gene_ID[i]))+
+                                            theme(plot.title = element_text(size=8)))
+  #dev.off()
+}
+print(noquote(paste("Tfour", 1:24, ",", sep = '')))
+table4 <- ggarrange(Tfour1,  Tfour2,  Tfour3,  Tfour4,  Tfour5,  Tfour6,  Tfour7,  Tfour8, 
+                    Tfour9,  Tfour10, Tfour11, Tfour12, Tfour13, Tfour14, Tfour15, Tfour16,
+                    Tfour17, Tfour18, Tfour19, Tfour20, Tfour21, Tfour22, Tfour23, Tfour24,
+                    ncol=3, nrow=3)
+
+png("table4aUMAPs.png", width = 700, height = 700)
+plot(table4$`1`)
 dev.off()
-png("table 4b.png", width = 700, height = 700)
-plot(table4b)
+png("table4bUMAPs.png", width = 700, height = 700)
+plot(table4$`2`)
 dev.off()
-png("table 4c.png", width = 700, height = 700)
-plot(table4c)
+png("table4cUMAPs.png", width = 700, height = 700)
+plot(table4$`3`)
 dev.off()
-png("table 5.png", width = 700, height = 700)
+
+######### plots for table 5
+num <- 1: 8
+for (i in num){
+  #a <- features1$gene_ID[i]
+  #png(sprintf("%s.png", a), width = 550, height = 350)
+  assign(paste("Tfive", i, sep = ''), FeaturePlot(seurat_object, features = features5$gene_ID[i]) +  
+           labs(title = paste(features5$protein[i],"\n", features5$gene_ID[i]))+
+           theme(plot.title = element_text(size=8)))
+  #dev.off()
+}
+print(noquote(paste("Tfive", 1:8, ",", sep = '')))
+table5 <- ggarrange(Tfive1, Tfive2, Tfive3, Tfive4, Tfive5, 
+                    Tfive6, Tfive7, Tfive8, nrow = 3, ncol =3)
+
+png("table5aUMAPs.png", width = 700, height = 700)
 plot(table5)
 dev.off()
 
+##END OF UMAPS
 
-
+##### attempt to investigate transformation
 
 list(features1$gene_ID)
 #distributions
@@ -226,6 +262,10 @@ raw <- NormalizeData(raw0)
 final <- seurat_object[["integrated"]]@data
 
 raw1 <- NormalizeData(raw)
+
+
+### oesophageal gland work 
+
 og <- seurat_object@active.ident
 DimPlot(object = seurat_object, cells = c, reduction = 'umap')
 FeaturePlot(object = seurat_object, cells = c, features = 'Smp-067060')
