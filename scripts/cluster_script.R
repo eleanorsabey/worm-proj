@@ -109,24 +109,7 @@ DimPlot(object = seurat_object, cells = c, reduction = 'umap')
 
 
 
-#recluster attempt
-DimPlot(object = seurat_object, label = TRUE, pt.size = 0.5) + theme(legend.position = "none")
 
-seurat_object[["ClusterNames_0.6"]] <- Idents(object = seurat_object)
-seurat_object <- FindClusters(object = seurat_object, resolution = 1)
-plot1 <- DimPlot(object = seurat_object, label = TRUE) + theme(legend.position = "none")
-plot2 <- DimPlot(object = seurat_object, group.by = "ClusterNames_0.6", label = TRUE) + theme(legend.position = "none")
-plot_grid(plot1, plot2)
-plot3 <- DimPlot(object = seurat_object, label = TRUE, cells = c) 
-plot4 <- DimPlot(object = seurat_object, group.by = "ClusterNames_0.6", label = TRUE, cells = c)
-plot_grid(plot3, plot4)
-DimPlot(object = seurat_object, reduction = 'umap', cells.highlight = c, label = TRUE) + theme(legend.position = "none") 
-og.markers <- FindMarkers(object = seurat_object, ident.1 = 0, ident.2 = 54)
-setDT(og.markers, keep.rownames = TRUE)[]
-
-#doesn't work to recluster eso gland isolated 
-#seurat_sub[["ClusterNames_0.6"]] <- Idents(object = seurat_sub)
-#seurat_sub <- FindClusters(object = seurat_sub, resolution = 1)
 
 
 #get 0.05 as bonferoni corrected value 
@@ -151,7 +134,7 @@ FeaturePlot(object = seurat_object, cells = c, features = markers$rn, cols = c("
 #plot for genes shown to distinguish anterioir and posterior glands from literatire
 eso_proteins <- read.csv("esophageal_gland_proteins.csv")
 colnames(eso_proteins) <- c('name', 'ID')
-num <- 1:74
+num <- 1:71
 for (i in num) {
   assign(paste('a', i, sep=''),FeaturePlot(object = seurat_object, cells = c, features = eso_proteins$ID[i], cols = c("orange", "blue")) +
            labs(title = paste(eso_proteins$name[i],"\n", eso_proteins$ID[i]))+
@@ -201,7 +184,7 @@ coord2 <- as.data.frame(coord)
 library(data.table)
 setDT(coord2, keep.rownames = TRUE)[]
 
-#remove single cell outlier
+#remove single cell outlier ACTATCTCACGTTGGC_9
 coord2 <- coord2[-41,]
 #separate into upper and lower clusters, label, then combine
 library(dplyr)
@@ -214,24 +197,142 @@ lower <- cbind(lower, cluster)
 cluster_df <- rbind(lower, upper)
 colnames(cluster_df) <- c('cell', 'UMAP_1', 'UMAP_2', 'cluster')
 
-# MEGs 12, 16, 17 should mark anterior gland 
-#12 = Smp-152630, 16 = Smp-158890, 17 = Smp-180620
-library(tidyr)
-antMEGS <- c('Smp-152630', 'Smp-158890', 'Smp-180620')
-#raw count data
-dat <- seurat_sub@assays[["RNA"]]@counts
-dat <- data.frame(dat)
-newdat <- dat[antMEGS,]
-cn <- colnames(newdat)
-setDT(newdat, keep.rownames = TRUE)[]
-countdf <- pivot_longer(newdat, cols = cn, names_to = "cell")
-colnames(countdf) <- c('ID', 'cell', 'rna_per_cell')
-mergedf <- merge(countdf, cluster_df, by = "cell")
+#add true neoblasts into a copy of the dataframe 
+neo <- seurat_object@active.ident
+neodf <- data.frame(neo)
+setDT(neodf, keep.rownames = TRUE)[]
+colnames(neodf) <- c("cell", "tissue")
+neodf$tissue <- as.factor(neodf$tissue)
+d <- filter(neodf, neodf$tissue == "neoblast")
+c <- d$cell
+seurat_sub_neo <- subset(seurat_object, cells = c)  
+coord <- seurat_sub_neo[["umap"]]@cell.embeddings
+coord2 <- as.data.frame(coord)
+library(data.table)
+setDT(coord2, keep.rownames = TRUE)[]
+cluster <- c('neoblast')
+neo_cells <- cbind(coord2, cluster)
+colnames(neo_cells) <- c('cell', 'UMAP_1', 'UMAP_2', 'cluster')
+neo_og_cells <- rbind(cluster_df, neo_cells)
 
-#scaled data
+### are the oesophageal cells not neoblasts
+library(tidyr)
+#change in Smp-ID for OG cell markers #meg8.2 = 'Smp-172180' this ID was used to highlight OG cells in the Wendt Paper
+#megs 4.2 = Smp-085840 14 = Smp-124000 meant to mark OG gland  (https://doi.org/10.1371/journal.pntd.0002337)
+#neoblast marker nanos2 = smp-051920
+dat2 <- seurat_sub@assays[["integrated"]]@scale.data
+dat3 <- seurat_sub_neo@assays[["integrated"]]@scale.data
+dat2 <- data.frame(dat2)
+dat3 <- data.frame(dat3)
+
+newdat2 <- dat2['Smp-051920',]
+newdat3 <- dat3['Smp-051920',]
+
+cn2 <- colnames(newdat2)
+cn3 <- colnames(newdat3)
+
+setDT(newdat2, keep.rownames = TRUE)[]
+setDT(newdat3, keep.rownames = TRUE)[]
+
+ogcountdf <- pivot_longer(newdat2, cols = cn2, names_to = "cell")
+nbcountdf <- pivot_longer(newdat3, cols = cn3, names_to = "cell")
+
+colnames(ogcountdf) <- c('ID', 'cell', 'scaled_counts_per_cell')
+colnames(nbcountdf) <- c('ID', 'cell', 'scaled_counts_per_cell')
+
+ognbcountdf <- rbind(ogcountdf, nbcountdf)
+
+nc <- ognbcountdf$cell
+
+ogandneo <- merge(ognbcountdf, neo_og_cells, by = 'cell')
+
+nc <- neo_og_cells$cell
+
+ggplot(data = ogandneo, aes(x = cluster, y = scaled_counts_per_cell)) +
+  geom_violin() +
+  geom_jitter(width=0.15, alpha=0.5)
+
+#means for each cluster group
+ogandneo %>% 
+  group_by(cluster) %>% 
+  summarise(mean(scaled_counts_per_cell))
+
+
+nbcountsummary <-  ogandneo %>%
+  group_by(cluster) %>%
+  summarise(mean = mean(scaled_counts_per_cell),
+            std = sd(scaled_counts_per_cell),
+            n = length(scaled_counts_per_cell),
+            se = std/sqrt(n))
+
+#needs to be anova to compare the three clusters 
+mod <- aov(scaled_counts_per_cell ~ cluster, data = ogandneo)
+summary(mod)
+TukeyHSD(mod)
+plot(mod, 1)
+plot(mod, 2)
+#If data doesnt look normally distributed so use non-parametric test 
+
+kw <- kruskal.test(scaled_counts_per_cell ~ cluster, data = ogandneo)
+pairwise.wilcox.test(ogandneo$scaled_counts_per_cell, ogandneo$cluster,
+                    p.adjust.method = "BH")
+
+
+
+## heatmap for all og proteins 
+c <- cluster_df$cell 
+meta <- cluster_df[,-c(2:3)]
+cell <- "ACTATCTCACGTTGGC_9"
+cluster <- "outlier"
+outlier <- data.frame(cell, cluster)
+meta<- rbind(meta, outlier)
+names <- meta[,1]
+library(tidyr)
+meta$cell <- as.factor(meta$cell)
+meta$cluster <- as.factor(meta$cluster)
+meta <- data.frame(meta)
+row.names(meta) <- meta$cell
+cluster.info <- meta 
+seurat_sub <- AddMetaData(object = seurat_sub, metadata = cluster.info)
+
+library(RColorBrewer)
+#by default heatmap looks as scale.data slot, add cells = c to remove outlier column
+eso_short <- eso_proteins
+rownames(eso_short) <- eso_short$ID
+eso_NA <- c('Smp-034420', 'Smp-132480', 'Smp-031180', 'Smp-300080', 'Smp-300070', 'Smp-167770', 'Smp-136240', 'Smp-213500', 'Smp-082030', 'Smp-071610', 'Smp-043390', 'Smp-019030', 'Smp-010620', 'Smp-002600', 'Smp-243780', 'Smp-243760', 'Smp-243750', 'Smp-331590', 'Smp-318200', 'Smp-266940', 'Smp-331380', 'Smp-165050', 'Smp-307240', 'Smp-307220', 'Smp-325680', 'Smp-138060', 'Smp-138070', 'Smp-138080', 'Smp-180340', 'Smp-180310', 'Smp-180320', 'Smp-159830', 'Smp-180330', 'Smp-159800')
+esocleaned <- eso_short[!eso_short$ID %in% eso_NA, ]
+
+#scale_y_discrete labels from opposite way to plotting so label from an inverted dataframe
+library(purrr)
+esoflipped <- esocleaned
+esoflipped <- esoflipped %>% map_df(rev)
+
+
+DoHeatmap(object = seurat_sub, features = esocleaned$ID, group.by = "cluster", draw.lines = TRUE)+ 
+  scale_fill_gradientn(colours = c('blue', 'black', 'orange')) +
+  scale_y_discrete(labels = esoflipped$name)
+ 
+
+#try making heatmap read raw count expression slot
+
+eso_proteinsflip <- eso_proteins
+eso_proteinsflip <- eso_proteinsflip %>% map_df(rev)
+
+DoHeatmap(object = seurat_sub, features = eso_proteins$ID, group.by = "cluster", assay = 'RNA', slot = "counts") +
+  scale_fill_gradientn(colours = c('black', 'orange')) +
+  scale_y_discrete(labels = eso_proteinsflip$name)
+
+# 1. T test between expression of selected proteins between clusters of OG cells
+
+#meg8.2 = 'Smp-172180' this ID was used to highlight OG cells in the Wendt Paper
+#megs 4.2 = Smp-085840 14 = Smp-124000 meant to mark OG gland  (https://doi.org/10.1371/journal.pntd.0002337)
+
+#Use scaled data slot
 dat1 <- seurat_sub@assays[["integrated"]]@scale.data
 dat1 <- data.frame(dat1)
-newdat1 <- dat1[antMEGS,]
+#change Smp-ID for each 
+newdat1 <- dat1['Smp-124000',]
+
 cn1 <- colnames(newdat1)
 setDT(newdat1, keep.rownames = TRUE)[]
 scaledatadf <- pivot_longer(newdat1, cols = cn1, names_to = "cell")
@@ -239,36 +340,14 @@ colnames(scaledatadf) <- c('ID', 'cell', 'scaled_counts_per_cell')
 mergedf1 <- merge(scaledatadf, cluster_df, by = "cell")
 
 #t test to assess if theres a difference in ant meg expression
-ggplot(data = mergedf, aes(x = cluster, y = rna_per_cell)) +
-  geom_violin()
-#means for each cluster group
-mergedf %>% 
-  group_by(cluster) %>% 
-  summarise(mean(rna_per_cell))
-#1 lower                  0.232
-#2 upper                  0.222
-
-countsummary <- mergedf %>%
-  group_by(cluster) %>%
-  summarise(mean = mean(rna_per_cell),
-            std = sd(rna_per_cell),
-            n = length(rna_per_cell),
-            se = std/sqrt(n))
-t.test(data = mergedf,
-       rna_per_cell ~ cluster,
-       var.equal = T)
-#no significant difference between expression of anteriir meg
-#RAW: t = 0.060608, df = 172, p-value = 0.9517
-
-
 ggplot(data = mergedf1, aes(x = cluster, y = scaled_counts_per_cell)) +
-  geom_violin()
+  geom_violin()+
+  geom_jitter(width=0.15, alpha=0.5)
 #means for each cluster group
 mergedf1 %>% 
   group_by(cluster) %>% 
   summarise(mean(scaled_counts_per_cell))
-#1 lower                  -0.0471
-#2 upper                  -0.0454
+
 
 countsummary <- mergedf1 %>%
   group_by(cluster) %>%
@@ -279,76 +358,37 @@ countsummary <- mergedf1 %>%
 t.test(data = mergedf1,
        scaled_counts_per_cell ~ cluster,
        var.equal = T)
-# no significant difference 
-#SCALED: t = -0.015033, df = 172, p-value = 0.988
 
 
-#are the oesophageal cells not neoblasts
-#neoblast marker nanos2 = smp-051920
-dat2 <- seurat_sub@assays[["RNA"]]@counts
-dat2 <- data.frame(dat2)
-newdat2 <- dat2['Smp-051920',]
-cn2 <- colnames(newdat2)
-setDT(newdat2, keep.rownames = TRUE)[]
-nbcountdf <- pivot_longer(newdat2, cols = cn2, names_to = "cell")
-colnames(nbcountdf) <- c('ID', 'cell', 'counts_per_cell')
-mergedf2 <- merge(nbcountdf, cluster_df, by = "cell")
-
-ggplot(data = mergedf2, aes(x = cluster, y = counts_per_cell)) +
-  geom_violin()
-#means for each cluster group
-mergedf2 %>% 
-  group_by(cluster) %>% 
-  summarise(mean(counts_per_cell))
+# 2. Recluster the lower cluster and assess differences in expression of anterior/posterior MEGs.
+# MEGs 12, 16, 17 should mark anterior gland 
+#12 = Smp-152630, 16 = Smp-158890, 17 = Smp-180620
 
 
-nbcountsummary <- mergedf2 %>%
-  group_by(cluster) %>%
-  summarise(mean = mean(counts_per_cell),
-            std = sd(counts_per_cell),
-            n = length(counts_per_cell),
-            se = std/sqrt(n))
-t.test(data = mergedf2,
-       counts_per_cell ~ cluster,
-       var.equal = T)
-#RAW: t = -2.3389, df = 56, p-value = 0.02293
-#SCALED: t = -3.0284, df = 56, p-value = 0.003714
+#recluster attempt
 
-#difference in expression for all eso proteins between upper and lower 
-library(tidyr)
-eso <- eso_proteins$ID
-#make dataframe 
-dat <- seurat_sub@assays[["integrated"]]@scale.data
-dat <- data.frame(dat)
-newdat <- dat[eso,]
-cn <- colnames(newdat)
-setDT(newdat, keep.rownames = TRUE)[]
-countdf <- pivot_longer(newdat, cols = cn, names_to = "cell")
-colnames(countdf) <- c('ID', 'cell', 'rna_per_cell')
-mergedf <- merge(countdf, cluster_df, by = "cell")
-#analyse
-ggplot(data = mergedf, aes(x = cluster, y = rna_per_cell)) +
-  geom_violin()
-#means for each cluster group
-mergedf %>% 
-  group_by(cluster) %>% 
-  summarise(mean(rna_per_cell))
-#1 lower                  R= 0.718, S= 2.0094990
-#2 upper                  R= 0.187, S= 0.4549808 
+#lower cell df made earlier
+colnames(lower) <- c('cell', 'UMAP_1', 'UMAP_2', 'cluster') 
+lnames <- lower$cell
 
-countsummary <- mergedf %>%
-  group_by(cluster) %>%
-  summarise(mean = mean(rna_counts_per_cell),
-            std = sd(rna_counts_per_cell),
-            n = length(rna_counts_per_cell),
-            se = std/sqrt(n))
+DimPlot(object = seurat_object, label = TRUE, pt.size = 0.5) + theme(legend.position = "none")
 
-t.test(data = mergedf,
-       rna_per_cell ~ cluster,
-       var.equal = T)
-#RAW:t = 5.179, df = 4290, p-value = 2.333e-07
-#SCALED:t = 7.9612, df = 2202, p-value = 2.703e-15
+seurat_object[["ClusterNames_0.6"]] <- Idents(object = seurat_object)
+seurat_object <- FindClusters(object = seurat_object, resolution = 1)
+plot1 <- DimPlot(object = seurat_object, label = TRUE) + theme(legend.position = "none")
+plot2 <- DimPlot(object = seurat_object, group.by = "ClusterNames_0.6", label = TRUE) + theme(legend.position = "none")
+plot_grid(plot1, plot2)
+plot3 <- DimPlot(object = seurat_object, label = TRUE, cells = nc)+geom_point(alpha=0.5)
+plot4 <- DimPlot(object = seurat_object, group.by = "ClusterNames_0.6", label = TRUE, cells = nc)
+plot4 + geom_point(alpha=0.5)
+plot_grid(plot3, plot4)
+DimPlot(object = seurat_object, reduction = 'umap', cells.highlight = c, label = TRUE) + theme(legend.position = "none") 
+og.markers <- FindMarkers(object = seurat_object, ident.1 = 0, ident.2 = 54)
+setDT(og.markers, keep.rownames = TRUE)[]
 
+#doesn't work to recluster eso gland isolated 
+#seurat_sub[["ClusterNames_0.6"]] <- Idents(object = seurat_sub)
+#seurat_sub <- FindClusters(object = seurat_sub, resolution = 1)
 #reluster attempt on og gland only ## desnt work
 # DimPlot(object = seurat_sub, label = TRUE, pt.size = 0.5) + theme(legend.position = "none")
 # seurat_sub[["ClusterNames_0.6"]] <- Idents(object = seurat_sub)
