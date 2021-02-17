@@ -17,6 +17,7 @@ c <- d$cell
 
 #subset the main data object for the oesophageal cells
 seurat_sub <- subset(seurat_object, cells = c)
+seurat_sub1 <- seurat_object[,c]
 
 #find top10 enriched genes for each slot in oesophageal subset
 dat <- seurat_sub@assays[["RNA"]]@data
@@ -140,13 +141,13 @@ for (i in num) {
            labs(title = paste(eso_proteins$name[i],"\n", eso_proteins$ID[i]))+
            theme(plot.title = element_text(size=8)))
 }
-print(noquote(paste("a", 1:74, ",", sep = '')))
+
 eso <- ggarrange(a1,  a2,  a3,  a4,  a5,  a6,  a7,  a8,  a9,  a10, a11, a12, a13, a14,
                  a15, a16, a17, a18, a19, a20, a21, a22, a23, a24, a25, a26, a27, a28,
                  a29, a30, a31, a32, a33, a34, a35, a36, a37, a38, a39, a40, a41, a42,
                  a43, a44, a45, a46, a47, a48, a49, a50, a51, a52, a53, a54, a55, a56,
                  a57, a58, a59, a60, a61, a62, a63, a64, a65, a66, a67, a68, a69, a70,
-                 a71, a72, a73, a74, ncol=3, nrow=3)
+                 a71, ncol=3, nrow=3)
 png("esophageal_UMAPs.png", width = 700, height =700)
 plot(eso$`1`)
 dev.off()
@@ -171,9 +172,7 @@ dev.off()
 png("esophageal_UMAPsh.png", width = 700, height =700)
 plot(eso$`8`)
 dev.off()
-png("esophageal_UMAPsi.png", width = 700, height =700)
-plot(eso$`9`)
-dev.off()
+
 
 #extract coordinates of oesophageal cells
 DimPlot(object = seurat_sub, cells = c, reduction = 'umap')
@@ -220,13 +219,13 @@ library(tidyr)
 #change in Smp-ID for OG cell markers #meg8.2 = 'Smp-172180' this ID was used to highlight OG cells in the Wendt Paper
 #megs 4.2 = Smp-085840 14 = Smp-124000 meant to mark OG gland  (https://doi.org/10.1371/journal.pntd.0002337)
 #neoblast marker nanos2 = smp-051920
-dat2 <- seurat_sub@assays[["integrated"]]@scale.data
-dat3 <- seurat_sub_neo@assays[["integrated"]]@scale.data
+dat2 <- seurat_sub@assays[["RNA"]]@counts
+dat3 <- seurat_sub_neo@assays[["RNA"]]@counts
 dat2 <- data.frame(dat2)
 dat3 <- data.frame(dat3)
 
-newdat2 <- dat2['Smp-051920',]
-newdat3 <- dat3['Smp-051920',]
+newdat2 <- dat2['Smp-124000',]
+newdat3 <- dat3['Smp-124000',]
 
 cn2 <- colnames(newdat2)
 cn3 <- colnames(newdat3)
@@ -237,8 +236,8 @@ setDT(newdat3, keep.rownames = TRUE)[]
 ogcountdf <- pivot_longer(newdat2, cols = cn2, names_to = "cell")
 nbcountdf <- pivot_longer(newdat3, cols = cn3, names_to = "cell")
 
-colnames(ogcountdf) <- c('ID', 'cell', 'scaled_counts_per_cell')
-colnames(nbcountdf) <- c('ID', 'cell', 'scaled_counts_per_cell')
+colnames(ogcountdf) <- c('ID', 'cell', 'counts_per_cell')
+colnames(nbcountdf) <- c('ID', 'cell', 'counts_per_cell')
 
 ognbcountdf <- rbind(ogcountdf, nbcountdf)
 
@@ -248,7 +247,7 @@ ogandneo <- merge(ognbcountdf, neo_og_cells, by = 'cell')
 
 nc <- neo_og_cells$cell
 
-ggplot(data = ogandneo, aes(x = cluster, y = scaled_counts_per_cell)) +
+ggplot(data = ogandneo, aes(x = cluster, y = counts_per_cell)) +
   geom_violin() +
   geom_jitter(width=0.15, alpha=0.5)
 
@@ -295,6 +294,8 @@ row.names(meta) <- meta$cell
 cluster.info <- meta 
 seurat_sub <- AddMetaData(object = seurat_sub, metadata = cluster.info)
 
+DimPlot(object = seurat_sub, reduction = 'umap', group.by = "cluster")
+
 library(RColorBrewer)
 #by default heatmap looks as scale.data slot, add cells = c to remove outlier column
 eso_short <- eso_proteins
@@ -328,21 +329,22 @@ DoHeatmap(object = seurat_sub, features = eso_proteins$ID, group.by = "cluster",
 #megs 4.2 = Smp-085840 14 = Smp-124000 meant to mark OG gland  (https://doi.org/10.1371/journal.pntd.0002337)
 
 #Use scaled data slot
-dat1 <- seurat_sub@assays[["integrated"]]@scale.data
+dat1 <- seurat_sub@assays[["RNA"]]@counts
 dat1 <- data.frame(dat1)
 #change Smp-ID for each 
-newdat1 <- dat1['Smp-124000',]
+newdat1 <- dat1['Smp-085840',]
 
 cn1 <- colnames(newdat1)
 setDT(newdat1, keep.rownames = TRUE)[]
-scaledatadf <- pivot_longer(newdat1, cols = cn1, names_to = "cell")
-colnames(scaledatadf) <- c('ID', 'cell', 'scaled_counts_per_cell')
-mergedf1 <- merge(scaledatadf, cluster_df, by = "cell")
+countdatadf <- pivot_longer(newdat1, cols = cn1, names_to = "cell")
+colnames(countdatadf) <- c('ID', 'cell', 'counts_per_cell')
+mergedf1 <- merge(countdatadf, cluster_df, by = "cell")
 
-#t test to assess if theres a difference in ant meg expression
-ggplot(data = mergedf1, aes(x = cluster, y = scaled_counts_per_cell)) +
+#t test to assess if theres a difference in expression between clusters 
+ggplot(data = mergedf1, aes(x = cluster, y = counts_per_cell)) +
   geom_violin()+
   geom_jitter(width=0.15, alpha=0.5)
+
 #means for each cluster group
 mergedf1 %>% 
   group_by(cluster) %>% 
@@ -351,12 +353,12 @@ mergedf1 %>%
 
 countsummary <- mergedf1 %>%
   group_by(cluster) %>%
-  summarise(mean = mean(scaled_counts_per_cell),
-            std = sd(scaled_counts_per_cell),
+  summarise(mean = mean(counts_per_cell),
+            std = sd(counts_per_cell),
             n = length(scaled_counts_per_cell),
             se = std/sqrt(n))
 t.test(data = mergedf1,
-       scaled_counts_per_cell ~ cluster,
+       counts_per_cell ~ cluster,
        var.equal = T)
 
 
@@ -365,35 +367,142 @@ t.test(data = mergedf1,
 #12 = Smp-152630, 16 = Smp-158890, 17 = Smp-180620
 
 
-#recluster attempt
+#recluster attempt  ## NOT FUNCTIONAL
 
 #lower cell df made earlier
 colnames(lower) <- c('cell', 'UMAP_1', 'UMAP_2', 'cluster') 
 lnames <- lower$cell
+namelist <- as.list(lnames)
+lapply(namelist, write, "lowercells.txt", append=TRUE)
+my_data <- read.delim("lowercells.txt", header = F)
 
-DimPlot(object = seurat_object, label = TRUE, pt.size = 0.5) + theme(legend.position = "none")
+seurat_lower <- subset(seurat_sub, cells = lnames)
 
-seurat_object[["ClusterNames_0.6"]] <- Idents(object = seurat_object)
-seurat_object <- FindClusters(object = seurat_object, resolution = 1)
-plot1 <- DimPlot(object = seurat_object, label = TRUE) + theme(legend.position = "none")
-plot2 <- DimPlot(object = seurat_object, group.by = "ClusterNames_0.6", label = TRUE) + theme(legend.position = "none")
-plot_grid(plot1, plot2)
-plot3 <- DimPlot(object = seurat_object, label = TRUE, cells = nc)+geom_point(alpha=0.5)
-plot4 <- DimPlot(object = seurat_object, group.by = "ClusterNames_0.6", label = TRUE, cells = nc)
-plot4 + geom_point(alpha=0.5)
-plot_grid(plot3, plot4)
-DimPlot(object = seurat_object, reduction = 'umap', cells.highlight = c, label = TRUE) + theme(legend.position = "none") 
-og.markers <- FindMarkers(object = seurat_object, ident.1 = 0, ident.2 = 54)
-setDT(og.markers, keep.rownames = TRUE)[]
+#view lower cluster
+DimPlot(object = seurat_lower, label = TRUE, pt.size = 1) + theme(legend.position = "none")
 
-#doesn't work to recluster eso gland isolated 
-#seurat_sub[["ClusterNames_0.6"]] <- Idents(object = seurat_sub)
-#seurat_sub <- FindClusters(object = seurat_sub, resolution = 1)
-#reluster attempt on og gland only ## desnt work
-# DimPlot(object = seurat_sub, label = TRUE, pt.size = 0.5) + theme(legend.position = "none")
-# seurat_sub[["ClusterNames_0.6"]] <- Idents(object = seurat_sub)
-# seurat_sub <- FindClusters(object = seurat_sub, resolution = 0.8)
-# plot1 <- DimPlot(object = seurat_sub, label = TRUE) + theme(legend.position = "none")
-# plot2 <- DimPlot(object = seurat_sub, group.by = "ClusterNames_0.6", label = TRUE) + theme(legend.position = "none")
-# plot_grid(plot1, plot2)
+#set default assay to RNA and remove integrated assay
+DefaultAssay(object = seurat_lower) <- "RNA"
+seurat_lower <- DietSeurat(seurat_lower,counts = TRUE, data = TRUE ,scale.data = FALSE,features = NULL, assays = 'RNA', dimreducs = NULL, graphs = NULL)
+
+#follow Satija pre-clustering analysis 
+seurat_lower <- NormalizeData(seurat_lower, normalization.method = "LogNormalize", scale.factor = 10000)
+seurat_lower <- FindVariableFeatures(seurat_lower, assay = 'RNA')
+all.genes <- rownames(seurat_lower)
+seurat_lower <- ScaleData(seurat_lower, features = all.genes)
+#set npcs to be less than the number of cells (n = 46)
+seurat_lower <- RunPCA(seurat_lower, npcs = 45,features = VariableFeatures(object = seurat_lower))
+#check 'dimensionality' of data
+seurat_lower <- JackStraw(seurat_lower, num.replicate = 100)
+seurat_lower <- ScoreJackStraw(seurat_lower, dims = 1:20)
+JackStrawPlot(seurat_lower, dims = 1:20)
+#pc 1-4 look better than rest
+ElbowPlot(seurat_lower)
+
+
+#set dim = 1:4 because pc 1-4 look okay
+seurat_lower <- FindNeighbors(seurat_lower, dims = 1:6)
+#resolution 0.9 makes each cluster on UMAP it's own colour roughly
+seurat_lower <- FindClusters(seurat_lower, resolution = 1)
+head(Idents(seurat_lower), 5)
+#run UMAP
+seurat_lower <- RunUMAP(seurat_lower, dims = 1:6)
+#view
+DimPlot(seurat_lower, reduction = "umap", pt.size = 3, cols = c('#7AD169', '#928DE0', '#FAA637')) 
+
+
+DoHeatmap(object = seurat_lower, features = eso_proteins$ID, group.by = "seurat_clusters", assay = 'RNA', slot = "counts", group.colors = c('#7AD169', '#928DE0', '#FAA637')) +
+  scale_fill_gradientn(colours = c('black', 'orange')) +
+  scale_y_discrete(labels = eso_proteinsflip$name)
+
+top20 <- head(VariableFeatures(seurat_lower), 20)
+plot1 <- VariableFeaturePlot(seurat_lower)
+plot2 <- LabelPoints(plot = plot1, points = top20, repel = TRUE)
+
+top20_names <- read.csv('top20OG.csv')
+colnames(top20_names) <- c('feature', 'name')
+top20flipped <- top20_names %>% map_df(rev)
+
+
+DoHeatmap(object = seurat_lower, features = top20, group.by = "seurat_clusters", assay = 'RNA', slot = "counts", group.colors = c('#7AD169', '#928DE0', '#FAA637')) +
+  scale_fill_gradientn(colours = c('black', 'orange')) +
+  scale_y_discrete(labels = top20flipped$name)
+
+#Use raw data slot
+
+og <- seurat_lower@active.ident
+ogdf <- data.frame(og)
+setDT(ogdf, keep.rownames = TRUE)[]
+colnames(ogdf) <- c("cell", "cluster")
+ogdf$cluster <- as.factor(ogdf$cluster)
+cluster_df <- ogdf
+
+#change Smp-ID for each 
+newdat1 <- dat1['Smp-171190',]
+
+cn1 <- colnames(newdat1)
+setDT(newdat1, keep.rownames = TRUE)[]
+countdatadf <- pivot_longer(newdat1, cols = cn1, names_to = "cell")
+colnames(countdatadf) <- c('ID', 'cell', 'counts_per_cell')
+mergedf1 <- merge(countdatadf, cluster_df, by = "cell")
+
+#t test to assess if theres a difference in expression between clusters 
+ggplot(data = mergedf1, aes(x = cluster, y = counts_per_cell)) +
+  geom_violin()+
+  geom_jitter(width=0.15, alpha=0.5)
+
+group0 <- filter(mergedf1, mergedf1$cluster == 0)
+group1 <- filter(mergedf1, mergedf1$cluster == 1)
+group2 <- filter(mergedf1, mergedf1$cluster == 2)
+
+group01 <- rbind(group0, group1)
+group12 <- rbind(group1, group2)
+group02 <- rbind(group0, group2)
+
+t.test(data = group01,
+       counts_per_cell ~ cluster,
+       var.equal = T)
+
+t.test(data = group12,
+       counts_per_cell ~ cluster,
+       var.equal = T)
+
+t.test(data = group02,
+       counts_per_cell ~ cluster,
+       var.equal = T)
+
+mod <- aov(counts_per_cell ~ cluster, data = mergedf1)
+summary(mod)
+
+#no significant difference of MEG8.1 between clusters 
+
+#alternative approach for marker proteins
+
+cluster0.markers <- FindMarkers(seurat_lower, ident.1 = 0,ident.2 = c(1, 2), min.pct = 0.50, only.pos = T)
+head(cluster0.markers, n = 5)
+
+cluster1.markers <- FindMarkers(seurat_lower, ident.1 = 1, ident.2 = c(0, 2), min.pct = 0.50, only.pos = T)
+head(cluster1.markers, n = 5)
+
+cluster2.markers <- FindMarkers(seurat_lower, ident.1 = 2,ident.2 = c(1, 2), min.pct = 0.50, only.pos = T)
+head(cluster2.markers, n = 5)
+
+markers <- c('Smp-044560', 'Smp-900040', 'Smp-900060', 'Smp-124000', 'Smp-042680', 'Smp-340700', 'Smp-153520', 'Smp-168500', 'Smp-034410', 'Smp-091750', 'Smp-056760', 'Smp-030370', 'Smp-051080', 'Smp-053820', 'Smp-040130')
+
+
+
+markersname <- read.csv('mart_export.txt')
+colnames(markersname) <- c('project', 'ID', 'name')
+markersflipped <- markersname %>% map_df(rev)
+
+DoHeatmap(object = seurat_lower, features = markers, group.by = "seurat_clusters", assay = 'RNA', slot = "counts", group.colors = c('#7AD169', '#928DE0', '#FAA637')) +
+  scale_fill_gradientn(colours = c('black', 'orange')) +
+  scale_y_discrete(labels = markersflipped$name)
+
+#GRAPHS
+
+
+top10 <- head(VariableFeatures(seurat_lower), 10)
+
+
 

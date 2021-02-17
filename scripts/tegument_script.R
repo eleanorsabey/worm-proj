@@ -69,86 +69,86 @@ cluster_df <- rbind(lower, upper1, upper2)
 colnames(cluster_df) <- c('cell', 'UMAP_1', 'UMAP_2', 'cluster')
 cluster <- c('upper1', 'upper2', 'lower1')
 
-#add true neoblasts into a copy of the dataframe 
-neo <- seurat_object@active.ident
-neodf <- data.frame(neo)
-setDT(neodf, keep.rownames = TRUE)[]
-colnames(neodf) <- c("cell", "tissue")
-neodf$tissue <- as.factor(neodf$tissue)
-d <- filter(neodf, neodf$tissue == "neoblast")
-c <- d$cell
-seurat_teg_neo <- subset(seurat_object, cells = c)  
-coord <- seurat_teg_neo[["umap"]]@cell.embeddings
-coord2 <- as.data.frame(coord)
-library(data.table)
-setDT(coord2, keep.rownames = TRUE)[]
-cluster <- c('neoblast')
-neo_cells <- cbind(coord2, cluster)
-colnames(neo_cells) <- c('cell', 'UMAP_1', 'UMAP_2', 'cluster')
-neo_og_cells <- rbind(cluster_df, neo_cells)
+# #add true neoblasts into a copy of the dataframe 
+# neo <- seurat_object@active.ident
+# neodf <- data.frame(neo)
+# setDT(neodf, keep.rownames = TRUE)[]
+# colnames(neodf) <- c("cell", "tissue")
+# neodf$tissue <- as.factor(neodf$tissue)
+# d <- filter(neodf, neodf$tissue == "neoblast")
+# c <- d$cell
+# seurat_teg_neo <- subset(seurat_object, cells = c)  
+# coord <- seurat_teg_neo[["umap"]]@cell.embeddings
+# coord2 <- as.data.frame(coord)
+# library(data.table)
+# setDT(coord2, keep.rownames = TRUE)[]
+# cluster <- c('neoblast')
+# neo_cells <- cbind(coord2, cluster)
+# colnames(neo_cells) <- c('cell', 'UMAP_1', 'UMAP_2', 'cluster')
+# neo_og_cells <- rbind(cluster_df, neo_cells)
 
-### are the otegument cells not neoblasts
-library(tidyr)
-#tegument marker Sm25 Smp-346900
-#neoblast marker nanos2 = smp-051920
-dat2 <- seurat_teg@assays[["integrated"]]@scale.data
-dat3 <- seurat_teg_neo@assays[["integrated"]]@scale.data
-dat2 <- data.frame(dat2)
-dat3 <- data.frame(dat3)
-
-newdat2 <- dat2['Smp-346900',]
-newdat3 <- dat3['Smp-346900',]
-
-cn2 <- colnames(newdat2)
-cn3 <- colnames(newdat3)
-
-setDT(newdat2, keep.rownames = TRUE)[]
-setDT(newdat3, keep.rownames = TRUE)[]
-
-ogcountdf <- pivot_longer(newdat2, cols = cn2, names_to = "cell")
-nbcountdf <- pivot_longer(newdat3, cols = cn3, names_to = "cell")
-
-colnames(ogcountdf) <- c('ID', 'cell', 'scaled_counts_per_cell')
-colnames(nbcountdf) <- c('ID', 'cell', 'scaled_counts_per_cell')
-
-ognbcountdf <- rbind(ogcountdf, nbcountdf)
-
-nc <- ognbcountdf$cell
-
-ogandneo <- merge(ognbcountdf, neo_og_cells, by = 'cell')
-
-nc <- neo_og_cells$cell
-
-
-
-ggplot(data = ogandneo, aes(x = cluster, y = scaled_counts_per_cell)) +
-  geom_violin() +
-  geom_jitter(width=0.15, alpha=0.5)
-
-#means for each cluster group
-ogandneo %>% 
-  group_by(cluster) %>% 
-  summarise(mean(scaled_counts_per_cell))
-
-
-nbcountsummary <-  ogandneo %>%
-  group_by(cluster) %>%
-  summarise(mean = mean(scaled_counts_per_cell),
-            std = sd(scaled_counts_per_cell),
-            n = length(scaled_counts_per_cell),
-            se = std/sqrt(n))
-
-#needs to be anova to compare the three clusters 
-mod <- aov(scaled_counts_per_cell ~ cluster, data = ogandneo)
-summary(mod)
-TukeyHSD(mod)
-plot(mod, 1)
-plot(mod, 2)
-#If data doesnt look normally distributed so use non-parametric test 
-
-kw <- kruskal.test(scaled_counts_per_cell ~ cluster, data = ogandneo)
-pairwise.wilcox.test(ogandneo$scaled_counts_per_cell, ogandneo$cluster,
-                     p.adjust.method = "BH")
+# ### are the otegument cells not neoblasts
+# library(tidyr)
+# #tegument marker Sm25 Smp-346900
+# #neoblast marker nanos2 = smp-051920
+# dat2 <- seurat_teg@assays[["integrated"]]@scale.data
+# dat3 <- seurat_teg_neo@assays[["integrated"]]@scale.data
+# dat2 <- data.frame(dat2)
+# dat3 <- data.frame(dat3)
+# 
+# newdat2 <- dat2['Smp-346900',]
+# newdat3 <- dat3['Smp-346900',]
+# 
+# cn2 <- colnames(newdat2)
+# cn3 <- colnames(newdat3)
+# 
+# setDT(newdat2, keep.rownames = TRUE)[]
+# setDT(newdat3, keep.rownames = TRUE)[]
+# 
+# ogcountdf <- pivot_longer(newdat2, cols = cn2, names_to = "cell")
+# nbcountdf <- pivot_longer(newdat3, cols = cn3, names_to = "cell")
+# 
+# colnames(ogcountdf) <- c('ID', 'cell', 'scaled_counts_per_cell')
+# colnames(nbcountdf) <- c('ID', 'cell', 'scaled_counts_per_cell')
+# 
+# ognbcountdf <- rbind(ogcountdf, nbcountdf)
+# 
+# nc <- ognbcountdf$cell
+# 
+# ogandneo <- merge(ognbcountdf, neo_og_cells, by = 'cell')
+# 
+# nc <- neo_og_cells$cell
+# 
+# 
+# 
+# ggplot(data = ogandneo, aes(x = cluster, y = scaled_counts_per_cell)) +
+#   geom_violin() +
+#   geom_jitter(width=0.15, alpha=0.5)
+# 
+# #means for each cluster group
+# ogandneo %>% 
+#   group_by(cluster) %>% 
+#   summarise(mean(scaled_counts_per_cell))
+# 
+# 
+# nbcountsummary <-  ogandneo %>%
+#   group_by(cluster) %>%
+#   summarise(mean = mean(scaled_counts_per_cell),
+#             std = sd(scaled_counts_per_cell),
+#             n = length(scaled_counts_per_cell),
+#             se = std/sqrt(n))
+# 
+# #needs to be anova to compare the three clusters 
+# mod <- aov(scaled_counts_per_cell ~ cluster, data = ogandneo)
+# summary(mod)
+# TukeyHSD(mod)
+# plot(mod, 1)
+# plot(mod, 2)
+# #If data doesnt look normally distributed so use non-parametric test 
+# 
+# kw <- kruskal.test(scaled_counts_per_cell ~ cluster, data = ogandneo)
+# pairwise.wilcox.test(ogandneo$scaled_counts_per_cell, ogandneo$cluster,
+#                      p.adjust.method = "BH")
 
 
 
@@ -233,13 +233,13 @@ seurat_teg <- RunPCA(seurat_teg, npcs = 647,features = VariableFeatures(object =
 seurat_teg <- JackStraw(seurat_teg, num.replicate = 100)
 seurat_teg <- ScoreJackStraw(seurat_teg, dims = 1:20)
 JackStrawPlot(seurat_teg, dims = 1:20)
-#pc 1-4 look better than rest
+#pc 1-20 look better than rest
 ElbowPlot(seurat_teg)
 
 
-#set dim = 1:4 because pc 1-4 look okay
+#set dim = 1:25 because pc 1-20 looked really good so up 25 is probably good
 seurat_teg <- FindNeighbors(seurat_teg, dims = 1:25)
-#resolution 0.9 makes each cluster on UMAP it's own colour roughly
+#resolution 1 
 seurat_teg <- FindClusters(seurat_teg, resolution = 1)
 
 
@@ -249,19 +249,38 @@ seurat_teg <- RunUMAP(seurat_teg, dims = 1:25)
 #view
 DimPlot(seurat_teg, reduction = "umap", pt.size = 3) 
 
+#only run if you want to see how original clusters map to new clusters
+# c <- cluster_df$cell 
+# meta <- cluster_df
+# names <- meta[,1]
+# library(tidyr)
+# meta$cell <- as.factor(meta$cell)
+# meta$cluster <- as.factor(meta$cluster)
+# meta <- data.frame(meta)
+# row.names(meta) <- meta$cell
+# cluster.info <- meta 
+# seurat_teg <- AddMetaData(object = seurat_teg, metadata = cluster.info)
+# 
+# DimPlot(seurat_teg, reduction = "umap", pt.size = 3, group.by = "cluster" ) 
 
-c <- cluster_df$cell 
-meta <- cluster_df
-names <- meta[,1]
-library(tidyr)
-meta$cell <- as.factor(meta$cell)
-meta$cluster <- as.factor(meta$cluster)
-meta <- data.frame(meta)
-row.names(meta) <- meta$cell
-cluster.info <- meta 
-seurat_teg <- AddMetaData(object = seurat_teg, metadata = cluster.info)
+#find top 10 or 20 genes that drive the subclusters (i.e. top DE genes) and plots these as a heat map
+top20 <- head(VariableFeatures(seurat_teg), 20)
+plot1 <- VariableFeaturePlot(seurat_teg)
+plot2 <- LabelPoints(plot = plot1, points = top20, repel = TRUE)
 
-DimPlot(seurat_teg, reduction = "umap", pt.size = 3, group.by = "cluster" ) 
+top20_names <- read.csv('top20_tegument.csv')
+colnames(top20_names) <- c('feature', 'name')
+top20flipped <- top20_names %>% map_df(rev)
+
+
+DoHeatmap(object = seurat_teg, features = top20, group.by = "seurat_clusters", assay = 'RNA', slot = "counts") +
+  scale_fill_gradientn(colours = c('black', 'orange')) +
+  scale_y_discrete(labels = top20flipped$name)
+
+#heatmap for tegument proteins on reclustered cells
+DoHeatmap(object = seurat_teg, features = genesteg$gene_ID, group.by = "seurat_clusters", assay = 'RNA', slot = "counts") +
+  scale_fill_gradientn(colours = c('black', 'orange')) +
+  scale_y_discrete(labels = genestegflip$protein)
 
 
 ## plot teg proteins on reculster UMAP
