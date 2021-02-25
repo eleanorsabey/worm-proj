@@ -10,8 +10,16 @@ colnames(genes) <- c('type','protein','gene_ID','table','tableName','tableID','g
 #whole seurat
 DimPlot(seurat_object, reduction="umap")
 
-FeaturePlot(seurat_object, features = 'Smp-090080') +
-  labs(title = paste("Serpin","\n", "Smp-090080"))+
+max(seurat_object[["integrated"]]@scale.data)
+min(seurat_object[["integrated"]]@scale.data)
+
+
+hist(seurat_object@assays$integrated@scale.data)
+
+
+FeaturePlot(seurat_object, features = 'Smp-105360',  slot = 'scale.data') + 
+  scale_colour_gradientn(colours = c("#ABD9E9", "#E0F3F8", "#FDAE61", "#F46D43", "#D73027"), breaks=c(-2,0,2,4,6,8,10),labels=c(-2,0,2,4,6,8,10),limits=c(-2,10), name = paste('Expression', '\n', 'Z-score')) +
+  labs(title = paste("notch","\n", "Smp-105360") )+
   theme(plot.title = element_text(size=10))
 
 VlnPlot(seurat_object, features = 'Smp-090080', pt.size = 0.5 ) +
@@ -33,7 +41,7 @@ for (i in num){
 }
 
 
-#unsure if this is necessary
+
 #split the genes dataframe by which table in Alan's paper they came from
 features1 <- subset(genes, genes$table==1)
 features2 <- subset(genes, genes$table==2)
@@ -62,6 +70,7 @@ for (i in num){
   #a <- features1$gene_ID[i]
   #png(sprintf("%s.png", a), width = 550, height = 350)
   assign(paste("Tone", i, sep = ''), FeaturePlot(seurat_object, features = features1$gene_ID[i]) +  
+           scale_colour_gradientn(colours = c("#ABD9E9", "#E0F3F8", "#FDAE61", "#F46D43", "#D73027"), breaks=c(-2,0,2,4,6,8,10),labels=c(-2,0,2,4,6,8,10),limits=c(-2,10)) +
            labs(title = paste(features1$protein[i],"\n", features1$gene_ID[i]))+
            theme(plot.title = element_text(size=8)))
            
@@ -84,6 +93,7 @@ for (i in num){
   #a <- features1$gene_ID[i]
   #png(sprintf("%s.png", a), width = 550, height = 350)
   assign(paste("Ttwo", i, sep = ''), FeaturePlot(seurat_object, features = features23$gene_ID[i]) +  
+           scale_colour_gradientn(colours = c("#ABD9E9", "#E0F3F8", "#FDAE61", "#F46D43", "#D73027"), breaks=c(-2,0,2,4,6,8,10),labels=c(-2,0,2,4,6,8,10),limits=c(-2,10))) +
            labs(title = paste(features23$protein[i],"\n", features23$gene_ID[i]))+
            theme(plot.title = element_text(size=8)))
   #dev.off()
@@ -129,6 +139,7 @@ for (i in num){
   #a <- features1$gene_ID[i]
   #png(sprintf("%s.png", a), width = 550, height = 350)
   assign(paste("Tfour", i, sep = ''), FeaturePlot(seurat_object, features = features4$gene_ID[i]) +  
+           scale_colour_gradientn(colours = c("#ABD9E9", "#E0F3F8", "#FDAE61", "#F46D43", "#D73027"), breaks=c(-2,0,2,4,6,8,10),labels=c(-2,0,2,4,6,8,10),limits=c(-2,10), name = paste('Expression', '\n', 'Z-score')) +
            labs(title = paste(features4$protein[i],"\n", features4$gene_ID[i]))+
            theme(plot.title = element_text(size=8)))
   #dev.off()
@@ -155,6 +166,7 @@ for (i in num){
   #a <- features1$gene_ID[i]
   #png(sprintf("%s.png", a), width = 550, height = 350)
   assign(paste("Tfive", i, sep = ''), FeaturePlot(seurat_object, features = features5$gene_ID[i]) +  
+           scale_colour_gradientn(colours = c("#ABD9E9", "#E0F3F8", "#FDAE61", "#F46D43", "#D73027"), breaks=c(-2,0,2,4,6,8,10),labels=c(-2,0,2,4,6,8,10),limits=c(-2,10), name = paste('Expression', '\n', 'Z-score')) +
            labs(title = paste(features5$protein[i],"\n", features5$gene_ID[i]))+
            theme(plot.title = element_text(size=8)))
   #dev.off()
