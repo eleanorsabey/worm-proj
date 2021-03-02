@@ -1,4 +1,6 @@
 #Tegument analysis
+
+#####
 setwd("E:/project/scripts")
 library(Seurat)
 library(dplyr)
@@ -22,6 +24,8 @@ library(ggpubr)
 library(grid)
 library(ggplotify)
 
+
+#####
 seurat_object <- readRDS("data/GSE146736_adult_scseq_seurat.rds")
 
 teg <- seurat_object@active.ident
@@ -40,12 +44,16 @@ teg2 <- filter(tegdf, tegdf$tissue == "tegument 2")
 teg <- rbind(teg1, teg2)#, teg3, teg4, teg5, teg6, teg7)
 c <- teg$cell
 
-
+#subset the larger seurat object into a smaller one just for tegument
+seurat_teg <- subset(seurat_object, cells = c)
+all.genes <- rownames(seurat_teg)
+seurat_teg <- ScaleData(seurat_teg, features = all.genes)
 # all tegument progenitor cells ("early tsp-2+", "egc+", "meg-1+", "zfp-1-1+", and "sm13+") into a
 # single cluster ("Tegument Progenitors"),
 
-#subset the larger seurat object into a smaller one just for tegument
-seurat_teg <- subset(seurat_object, cells = c)
+
+
+
 #map of all ce;;s
 DimPlot(object = seurat_object, reduction = 'umap', label = TRUE) + theme(legend.position = "none") 
 
@@ -53,8 +61,9 @@ DimPlot(object = seurat_object, reduction = 'umap', label = TRUE) + theme(legend
 DimPlot(object = seurat_object, reduction = 'umap', cells.highlight = c) + theme(legend.position = "none") 
 #plot only tegument cells, this shows how the two tegument identities locate
 DimPlot(object = seurat_object, cells = c, reduction = 'umap')
+ 
 
-
+#####
 #extract coordinates of teg cells
 DimPlot(object = seurat_teg, cells = c, reduction = 'umap')
 
@@ -85,6 +94,7 @@ cluster_df <- rbind(lower, upper1, upper2)
 colnames(cluster_df) <- c('cell', 'UMAP_1', 'UMAP_2', 'cluster')
 cluster <- c('upper1', 'upper2', 'lower1')
 
+
 #Add true neoblasts into a copy of the dataframe: 
 neo <- seurat_object@active.ident
 neodf <- data.frame(neo)
@@ -93,9 +103,9 @@ colnames(neodf) <- c("cell", "tissue")
 neodf$tissue <- as.factor(neodf$tissue)
 d <- filter(neodf, neodf$tissue == "neoblast")
 c <- d$cell
-seurat_teg_neo <- subset(seurat_object, cells = c) 
+seurat_neo <- subset(seurat_object, cells = c) 
 
-coord <- seurat_teg_neo[["umap"]]@cell.embeddings
+coord <- seurat_neo[["umap"]]@cell.embeddings
 coord2 <- as.data.frame(coord)
 setDT(coord2, keep.rownames = TRUE)[]
 cluster <- c('neoblast')
@@ -118,9 +128,9 @@ genes <- c('Smp-051920','Smp-105360','Smp-175590','Smp-045200','Smp-346900')
 names <- c('nanos-2','notch','fgfra','tal','sm25')
 stat <- cbind(genes, names)
 stat <- data.frame(stat)
-num <- 1:8
+num <- 1:5
 
-fileConn<-file("outputTegstats.txt")
+fileConn<-file("teg_vs_neo_stats.txt")
 sink(fileConn, append=TRUE)
 
 for (i in num){
@@ -176,83 +186,20 @@ for (i in num){
                              p.adjust.method = "none", paired = FALSE))
   
 }
-close(fileConn)
 sink()
+close(fileConn)
+
 statplot <- ggarrange(Plot1, hist1, box1, Plot2, hist2, box2, Plot3, hist3, box3, Plot4,  hist4, box4, ncol=3, nrow=4)
-statplot2 <- ggarrange(Plot5, hist5, box5, Plot6,  hist6, box6, Plot7, hist7, box7, Plot8, hist8, box8, ncol=3, nrow=4)
+statplot2 <- ggarrange(Plot5, hist5, box5, ncol=3, nrow=4)
 plot(statplot)
-png("statsplotOG1.png", width = 470, height = 800)
+png("teg_vs_neo_stats_1.png", width = 470, height = 800)
 plot(statplot)
 dev.off()
-png("statsplotOG2.png", width = 470, height = 800)
+png("teg_vs_neo_stats_2.png", width = 470, height = 800)
 plot(statplot2)
 dev.off()
 plot(Plot1)
 ###############
-dat3 <- seurat_teg_neo@assays[["integrated"]]@scale.data
-dat3 <- data.frame(dat3)
-
-#Change Smp-ID for genes of interest 
-newdat3 <- dat3['Smp-105360',]
-
-cn3 <- colnames(newdat3)
-
-setDT(newdat3, keep.rownames = TRUE)[]
-
-tegcountdf <- pivot_longer(newdat2, cols = cn2, names_to = "cell")
-nbcountdf <- pivot_longer(newdat3, cols = cn3, names_to = "cell")
-
-colnames(tegcountdf) <- c('ID', 'cell', 'expression')
-colnames(nbcountdf) <- c('ID', 'cell', 'expression')
-
-tegnbcountdf <- rbind(tegcountdf, nbcountdf)
-
-nc <- tegnbcountdf$cell
-
-tegandneo <- merge(tegnbcountdf, neo_teg_cells, by = 'cell')
-
-nc <- neo_teg_cells$cell
-
-#Anova to compare expression across the three clusters:
-mod <- aov(expression ~ cluster, data = tegandneo)
-#View anova:
-summary(mod)
-TukeyHSD(mod)
-
-#Check normality:
-hist(mod$residuals)
-qqPlot(mod$residuals)
-#Check equal varience:
-boxplot(expression ~ cluster,
-        data = tegandneo)
-
-#If varience isnt equal: Welch's anova 
-oneway.test(expression ~ cluster,
-            data = tegandneo,
-            var.equal = FALSE )
-
-pairwise.wilcox.test(tegandneo$expression, tegandneo$cluster,
-                     p.adjust.method = "none", paired = FALSE)
-
-
-#If data doesnt look normally distributed so use non-parametric test 
-
-kw <- kruskal.test(expression ~ cluster, data = ogandneo)
-
-
-#Plot of expression
-my_comparisons = list(c("lower1","neoblast"),c("upper1", "lower1"), c("upper2", "neoblast"), c('upper1', 'upper2'), c('upper1','neoblast' ))
-ggplot(data = tegandneo, aes(x = cluster, y = expression)) +
-  geom_violin() +
-  geom_jitter(width=0.15, alpha=0.5) +
-  stat_compare_means(comparisons = my_comparisons, hide.ns = FALSE, label = 'p.signif', paired = FALSE)
-
-#Mean expression for each group:
-ogandneo %>% 
-  group_by(cluster) %>% 
-  summarise(mean(expression))
-
-
 
 
 
@@ -279,41 +226,162 @@ genes2 <- filter(genes, (table==2))
 genes3 <- filter(genes, (table==3))
 genesteg <- rbind(genes2, genes3)
 
-teg_short <- genesteg
-rownames(teg_short) <- teg_short$gene_ID
-teg_NA <- c('Smp-302170', 'Smp-121990', 'Smp-046290', 'Smp-194920', 'Smp-091240', 'Smp-142450', 'Smp-071250', 'Smp-082810', 'Smp-062300', 'Smp-305460', 'Smp-163750', 'Smp-074140', 'Smp-045500', 'Smp-017430', 'Smp-315900', 'Smp-311520', 'Smp-104500', 'Smp-091650', 'Smp-015020', 'Smp-344400', 'Smp-244150', 'Smp-048230', 'Smp-037540', 'Smp-022990', 'Smp-313560', 'Smp-137410', 'Smp-136690')
-tegcleaned <- teg_short[!teg_short$gene_ID %in% teg_NA, ]
 
 #scale_y_discrete labels from opposite way to plotting so label from an inverted dataframe
 library(purrr)
-tegflipped <- tegcleaned
-tegflipped <- tegflipped %>% map_df(rev)
-
-
-DoHeatmap(object = seurat_teg, features = tegcleaned$gene_ID, group.by = "cluster", draw.lines = TRUE, assay = 'integrated', slot = "scale.data")+ 
-  scale_fill_gradientn(colours = c('blue','black', 'orange')) +
-  scale_y_discrete(labels = tegflipped$protein)
-
-
-DoHeatmap(object = seurat_teg_neo, features = tegcleaned$gene_ID, draw.lines = TRUE, assay = 'integrated', slot = "scale.data")+ 
-  scale_fill_gradientn(colours = c('blue','black', 'orange')) +
-  scale_y_discrete(labels = tegflipped$protein)
 
 #try making heatmap read raw count expression slot
 
 genestegflip <- genesteg
 genestegflip <- genestegflip %>% map_df(rev)
 
-DoHeatmap(object = seurat_teg, features = genesteg$gene_ID, group.by = "cluster", assay = 'RNA', slot = "counts") +
-  scale_fill_gradientn(colours = c('black', 'orange')) +
+DoHeatmap(object = seurat_teg, features = genesteg$gene_ID, group.by = "cluster", assay = 'integrated', slot = "scale.data") +
+  scale_fill_gradientn(colours = c('blue','black', 'orange')) +
   scale_y_discrete(labels = genestegflip$protein)
 
 
+####
+#anova to compare expression of genes betwwen clusters
+dat2 <- seurat_teg@assays[["integrated"]]@scale.data
+dat2 <- data.frame(dat2)
 
 
+#pick genes fro comparison 
+
+num <- 1:66
+
+fileConn<-file("original_cluster_stats_teg.txt")
+sink(fileConn, append=TRUE)
+
+for (i in num){
+  
+  n <- genesteg$tableName[i]
+  id <- genesteg$gene_ID[i]
+  
+  print(paste('Stats for gene', n, id))
+  
+  newdat2 <- dat2[id,]
+  
+  cn2 <- colnames(newdat2)
+  
+  setDT(newdat2, keep.rownames = TRUE)[]
+  
+  tegcountdf <- pivot_longer(newdat2, cols = cn2, names_to = "cell")
+  
+  colnames(tegcountdf) <- c('ID', 'cell', 'expression')
+  
+  tegdata <- merge(tegcountdf, cluster_df, by = 'cell')
+  
+  #Mean expression for each group:
+  print('Mean expression:')
+  print(tegdata %>% 
+          group_by(cluster) %>% 
+          summarise(mean(expression)))  
+  
+  #make Graph
+  my_comparisons = list(c("upper1", "lower1"), c("upper2","upper1"), c("upper2","lower1"))
+  assign(paste("Plot", i, sep = ''),ggplot(data = tegdata, aes(x = cluster, y = expression)) +
+           geom_violin() +
+           labs(title = paste(n,"\n", id))+
+           theme(plot.title = element_text(size=8))+
+           geom_jitter(width=0.15, alpha=0.5) +
+           stat_compare_means(comparisons = my_comparisons, hide.ns = FALSE, label = 'p.signif', paired = FALSE))
 
 
+  #Anova to compare expression across the three clusters:
+  mod <- aov(expression ~ cluster, data = tegdata)
+  #View anova:
+  print('Parametric ANOVA and TukeyHSD results:')
+  print(summary(mod))
+  print(TukeyHSD(mod))
+  
+  #Check normality:
+  assign(paste("hist", i, sep = ''), as.ggplot(~hist(mod$residuals)))
+  #Check equal varience:
+  assign(paste("box", i, sep = ''), as.ggplot(~boxplot(expression ~ cluster, data = tegdata)))
+  
+  
+  print("Non-parametric - Kruskal Wallis and unpaired Wilcox test:")
+  #If varience isnt equal: Welch's anova 
+  print(kruskal.test(expression ~ cluster, data = tegdata))
+  print(pairwise.wilcox.test(tegdata$expression, tegdata$cluster,
+                             p.adjust.method = "none", paired = FALSE))
+  
+}
+sink()
+close(fileConn)
 
+statplot <- ggarrange(Plot1,hist1,box1,    Plot2,hist2,box2,    Plot3,hist3,box3,    Plot4,hist4,box4,    Plot5,hist5,box5,    Plot6,hist6,box6,  Plot7,hist7,box7,    Plot8,hist8,box8,    Plot9,hist9,box9,    Plot10,hist10,box10, Plot11,hist11,box11, Plot12,hist12,box12, Plot13,hist13,box13, Plot14,hist14,box14, Plot15,hist15,box15, Plot16,hist16,box16, Plot17,hist17,box17, Plot18,hist18,box18, Plot19,hist19,box19, Plot20,hist20,box20, Plot21,hist21,box21, Plot22,hist22,box22, Plot23,hist23,box23, Plot24,hist24,box24, Plot25,hist25,box25, Plot26,hist26,box26, Plot27,hist27,box27, Plot28,hist28,box28, Plot29,hist29,box29, Plot30,hist30,box30, Plot31,hist31,box31, Plot32,hist32,box32, Plot33,hist33,box33, Plot34,hist34,box34, Plot35,hist35,box35, Plot36,hist36,box36, Plot37,hist37,box37, Plot38,hist38,box38, Plot39,hist39,box39, Plot40,hist40,box40, Plot41,hist41,box41, Plot42,hist42,box42, Plot43,hist43,box43, Plot44,hist44,box44, Plot45,hist45,box45, Plot46,hist46,box46, Plot47,hist47,box47, Plot48,hist48,box48, Plot49,hist49,box49, Plot50,hist50,box50, Plot51,hist51,box51, Plot52,hist52,box52, Plot53,hist53,box53, Plot54,hist54,box54, Plot55,hist55,box55, Plot56,hist56,box56, Plot57,hist57,box57, Plot58,hist58,box58, Plot59,hist59,box59, Plot60,hist60,box60, Plot61,hist61,box61, Plot62,hist62,box62, Plot63,hist63,box63, Plot64,hist64,box64, Plot65,hist65,box65, Plot66,hist66,box66, ncol=3, nrow=4)
+#grpah saving
+#####
+png("original_cluster_stats_teg_1.png", width = 500, height = 700)
+plot(statplot)
+dev.off()
+
+png("original_cluster_stats_teg_2.png", width = 500, height = 700)
+plot(statplot$`2`)
+dev.off()
+
+png("original_cluster_stats_teg_3.png", width = 500, height = 700)
+plot(statplot$`3`)
+dev.off()
+
+png("original_cluster_stats_teg_4.png", width = 500, height = 700)
+plot(statplot$`4`)
+dev.off()
+
+png("original_cluster_stats_teg_5.png", width = 500, height = 700)
+plot(statplot$`5`)
+dev.off()
+
+png("original_cluster_stats_teg_6.png", width = 500, height = 700)
+plot(statplot$`6`)
+dev.off()
+
+png("original_cluster_stats_teg_7.png", width = 500, height = 700)
+plot(statplot$`7`)
+dev.off()
+
+png("original_cluster_stats_teg_8.png", width = 500, height = 700)
+plot(statplot$`8`)
+dev.off()
+
+png("original_cluster_stats_teg_9.png", width = 500, height = 700)
+plot(statplot$`9`)
+dev.off()
+
+png("original_cluster_stats_teg_10.png", width = 500, height = 700)
+plot(statplot$`10`)
+dev.off()
+
+png("original_cluster_stats_teg_11.png", width = 500, height = 700)
+plot(statplot$`11`)
+dev.off()
+
+png("original_cluster_stats_teg_12.png", width = 500, height = 700)
+plot(statplot$`12`)
+dev.off()
+
+png("original_cluster_stats_teg_13.png", width = 500, height = 700)
+plot(statplot$`13`)
+dev.off()
+
+png("original_cluster_stats_teg_14.png", width = 500, height = 700)
+plot(statplot$`14`)
+dev.off()
+
+png("original_cluster_stats_teg_15.png", width = 500, height = 700)
+plot(statplot$`15`)
+dev.off()
+
+png("original_cluster_stats_teg_16.png", width = 500, height = 700)
+plot(statplot$`16`)
+dev.off()
+
+png("original_cluster_stats_teg_17.png", width = 500, height = 700)
+plot(statplot$`17`)
+dev.off()
+#####
 ### RECLUSTER TEGUMENT 
 
 
@@ -361,30 +429,184 @@ DimPlot(seurat_teg, reduction = "umap", pt.size = 3)
 # 
 # DimPlot(seurat_teg, reduction = "umap", pt.size = 3, group.by = "cluster" ) 
 
-#find top 10 or 20 genes that drive the subclusters (i.e. top DE genes) and plots these as a heat map
-top20 <- head(VariableFeatures(seurat_teg), 20)
-plot1 <- VariableFeaturePlot(seurat_teg)
-plot2 <- LabelPoints(plot = plot1, points = top20, repel = TRUE)
-
-top20_names <- read.csv('top20_tegument.csv')
-colnames(top20_names) <- c('feature', 'name')
-top20flipped <- top20_names %>% map_df(rev)
 
 
-DoHeatmap(object = seurat_teg, features = top20, group.by = "seurat_clusters", assay = 'RNA', slot = "scale.data") +
-  scale_fill_gradientn(colours = c('black', 'orange')) +
-  scale_y_discrete(labels = top20flipped$name)
+#heatmap for tegument proteins on reclustered cells
+DoHeatmap(object = seurat_teg, features = genesteg$gene_ID, group.by = "seurat_clusters", assay = 'RNA', slot = "scale.data") +
+  scale_fill_gradientn(colours = c('blue', 'black', 'orange')) +
+  scale_y_discrete(labels = genestegflip$protein)
+
+#stats on recluster
+
+
+#pick genes fro comparison 
+
+num <- 1:66
+
+dat2 <- seurat_teg@assays[["RNA"]]@scale.data
+dat2 <- data.frame(dat2)
+teg <- seurat_teg@active.ident
+tegdf <- data.frame(teg)
+setDT(tegdf, keep.rownames = TRUE)[]
+colnames(tegdf) <- c("cell", "cluster")
+tegdf$cluster <- as.factor(tegdf$cluster)
+
+fileConn<-file("recluster_stats_teg.txt")
+sink(fileConn, append=TRUE)
+
+for (i in num){
+  
+  n <- genesteg$tableName[i]
+  id <- genesteg$gene_ID[i]
+  
+  print(paste('Stats for gene', n, id))
+  
+  newdat2 <- dat2[id,]
+  
+  cn2 <- colnames(newdat2)
+  
+  setDT(newdat2, keep.rownames = TRUE)[]
+  
+  tegcountdf <- pivot_longer(newdat2, cols = cn2, names_to = "cell")
+  
+  colnames(tegcountdf) <- c('ID', 'cell', 'expression')
+  
+  tegdata <- merge(tegcountdf, tegdf, by = 'cell')
+  
+  #Mean expression for each group:
+  print('Mean expression:')
+  print(tegdata %>% 
+          group_by(cluster) %>% 
+          summarise(mean(expression)))  
+  
+  assign(paste("Plot", i, sep = ''),ggplot(data = tegdata, aes(x = cluster, y = expression)) +
+           geom_violin() +
+           labs(title = paste(n,"\n", id))+
+           theme(plot.title = element_text(size=8))+
+           geom_jitter(width=0.15, alpha=0.5))
+
+  #Anova to compare expression across the three clusters:
+  mod <- aov(expression ~ cluster, data = tegdata)
+  #View anova:
+  print('Parametric ANOVA and TukeyHSD results:')
+  print(summary(mod))
+  print(TukeyHSD(mod))
+  
+  #Check normality:
+  assign(paste("hist", i, sep = ''), as.ggplot(~hist(mod$residuals)))
+  #Check equal varience:
+  assign(paste("box", i, sep = ''), as.ggplot(~boxplot(expression ~ cluster, data = tegdata)))
+  
+  
+  print("Non-parametric - Kruskal Wallis and unpaired Wilcox test:")
+  #If varience isnt equal: Welch's anova 
+  print(kruskal.test(expression ~ cluster, data = tegdata))
+  print(pairwise.wilcox.test(tegdata$expression, tegdata$cluster,
+                             p.adjust.method = "none", paired = FALSE))
+  
+}
+sink()
+close(fileConn)
+
+statplot <- ggarrange(Plot1,hist1,box1,    Plot2,hist2,box2,    Plot3,hist3,box3,    Plot4,hist4,box4,    Plot5,hist5,box5,    Plot6,hist6,box6,  Plot7,hist7,box7,    Plot8,hist8,box8,    Plot9,hist9,box9,    Plot10,hist10,box10, Plot11,hist11,box11, Plot12,hist12,box12, Plot13,hist13,box13, Plot14,hist14,box14, Plot15,hist15,box15, Plot16,hist16,box16, Plot17,hist17,box17, Plot18,hist18,box18, Plot19,hist19,box19, Plot20,hist20,box20, Plot21,hist21,box21, Plot22,hist22,box22, Plot23,hist23,box23, Plot24,hist24,box24, Plot25,hist25,box25, Plot26,hist26,box26, Plot27,hist27,box27, Plot28,hist28,box28, Plot29,hist29,box29, Plot30,hist30,box30, Plot31,hist31,box31, Plot32,hist32,box32, Plot33,hist33,box33, Plot34,hist34,box34, Plot35,hist35,box35, Plot36,hist36,box36, Plot37,hist37,box37, Plot38,hist38,box38, Plot39,hist39,box39, Plot40,hist40,box40, Plot41,hist41,box41, Plot42,hist42,box42, Plot43,hist43,box43, Plot44,hist44,box44, Plot45,hist45,box45, Plot46,hist46,box46, Plot47,hist47,box47, Plot48,hist48,box48, Plot49,hist49,box49, Plot50,hist50,box50, Plot51,hist51,box51, Plot52,hist52,box52, Plot53,hist53,box53, Plot54,hist54,box54, Plot55,hist55,box55, Plot56,hist56,box56, Plot57,hist57,box57, Plot58,hist58,box58, Plot59,hist59,box59, Plot60,hist60,box60, Plot61,hist61,box61, Plot62,hist62,box62, Plot63,hist63,box63, Plot64,hist64,box64, Plot65,hist65,box65, Plot66,hist66,box66, ncol=3, nrow=3)
+#graph saving
+#####
+png("recluster_statsplot_teg_1.png", width = 470, height = 800)
+plot(statplot$`1`)
+dev.off()
+
+png("recluster_statsplot_teg_2.png", width = 470, height = 800)
+plot(statplot$`2`)
+dev.off()
+
+
+png("recluster_statsplot_teg_3.png", width = 470, height = 800)
+plot(statplot$`3`)
+dev.off()
+
+png("recluster_statsplot_teg_4.png", width = 470, height = 800)
+plot(statplot$`4`)
+dev.off()
+
+png("recluster_statsplot_teg_5.png", width = 470, height = 800)
+plot(statplot$`5`)
+dev.off()
+
+png("recluster_statsplot_teg_6.png", width = 470, height = 800)
+plot(statplot$`6`)
+dev.off()
+
+png("recluster_statsplot_teg_7.png", width = 470, height = 800)
+plot(statplot$`7`)
+dev.off()
+
+png("recluster_statsplot_teg_8.png", width = 470, height = 800)
+plot(statplot$`8`)
+dev.off()
+
+png("recluster_statsplot_teg_9.png", width = 470, height = 800)
+plot(statplot$`9`)
+dev.off()
+
+png("recluster_statsplot_teg_10.png", width = 470, height = 800)
+plot(statplot$`10`)
+dev.off()
+
+png("recluster_statsplot_teg_11.png", width = 470, height = 800)
+plot(statplot$`11`)
+dev.off()
+
+png("recluster_statsplot_teg_12.png", width = 470, height = 800)
+plot(statplot$`12`)
+dev.off()
+
+png("recluster_statsplot_teg_13.png", width = 470, height = 800)
+plot(statplot$`13`)
+dev.off()
+
+png("recluster_statsplot_teg_14.png", width = 470, height = 800)
+plot(statplot$`14`)
+dev.off()
+
+png("recluster_statsplot_teg_15.png", width = 470, height = 800)
+plot(statplot$`15`)
+dev.off()
+
+png("recluster_statsplot_teg_16.png", width = 470, height = 800)
+plot(statplot$`16`)
+dev.off()
+
+png("recluster_statsplot_teg_17.png", width = 470, height = 800)
+plot(statplot$`17`)
+dev.off()
+
+png("recluster_statsplot_teg_18.png", width = 470, height = 800)
+plot(statplot$`18`)
+dev.off()
+
+png("recluster_statsplot_teg_19.png", width = 470, height = 800)
+plot(statplot$`19`)
+dev.off()
+
+png("recluster_statsplot_teg_20.png", width = 470, height = 800)
+plot(statplot$`20`)
+dev.off()
+
+png("recluster_statsplot_teg_21.png", width = 470, height = 800)
+plot(statplot$`21`)
+dev.off()
+
+png("recluster_statsplot_teg_22.png", width = 470, height = 800)
+plot(statplot$`22`)
+dev.off()
+#####
 
 #finds markers that disinguish the sub clusters from each other
 allmarkersT <- FindAllMarkers(seurat_teg, assay = 'RNA', test.use =  'roc', only.pos = TRUE, return.thresh = 0)
 markersT <- filter(allmarkersT, myAUC >= 0.8)
 
-#find markers that distinguish the subclusters from every other cluster 
-
-
-
-
 #write_xlsx(markersT,"markersT.xlsx")
+
 
 markersannotatedT <- read.csv("markersTannotated.csv")
 markersannotatedT <- markersannotated[,-10]
@@ -402,14 +624,7 @@ markersannotatedT7 <- filter(markersannotatedT, cluster == 7)
 DoHeatmap(object = seurat_teg, features = markersT$gene, group.by = "seurat_clusters", assay = 'RNA', slot = "scale.data") +
   scale_fill_gradientn(colours = c('blue', 'black', 'orange')) 
 
-VlnPlot(seurat_object, features = 'Smp-340900', pt.size = 0.5 ) +
-    theme(legend.position = "none", axis.text.x = element_text(angle = 90))+
-    labs(title = paste("NA","\n", "Smp-340900"))
 
-#heatmap for tegument proteins on reclustered cells
-DoHeatmap(object = seurat_teg, features = genesteg$gene_ID, group.by = "seurat_clusters", assay = 'RNA', slot = "scale.data") +
-  scale_fill_gradientn(colours = c('blue', 'black', 'orange')) +
-  scale_y_discrete(labels = genestegflip$protein)
 
 
 

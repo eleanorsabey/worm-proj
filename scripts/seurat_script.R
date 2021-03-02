@@ -4,6 +4,8 @@ library(ggpubr)
 
 #load data
 seurat_object <- readRDS("data/GSE146736_adult_scseq_seurat.rds")
+
+DimPlot(seurat_object, reduction="umap", label = FALSE) + theme(legend.position = "none") 
 genes <- read.csv("gene list Master v2.csv")
 colnames(genes) <- c('type','protein','gene_ID','table','tableName','tableID','genestableID','geneName','description','ignore')
 
