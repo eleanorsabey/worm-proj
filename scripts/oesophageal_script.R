@@ -17,7 +17,7 @@ library(ggsignif)
 library(ggpubr)
 library(grid)
 library(ggplotify)
-
+library(sjmisc)
 
 #Read Seurat object in and filter for oesophageal gland cells:
 seurat_object <- readRDS("data/GSE146736_adult_scseq_seurat.rds")
@@ -36,13 +36,15 @@ all.genes <- rownames(seurat_sub)
 seurat_sub <- ScaleData(seurat_sub, features = all.genes)
 
 
-#Plot
+#Plots 
+#####
 #Map of whole Seurat object:
 DimPlot(object = seurat_object, reduction = 'umap', label = TRUE) + theme(legend.position = "none") 
 #Oesophageal gland cells highlighted amongst all cells:
 DimPlot(object = seurat_object, reduction = 'umap', cells.highlight = c) + theme(legend.position = "none") 
 #Plot only oesophageal gland cells:
 DimPlot(object = seurat_object, cells = c, reduction = 'umap')
+#####
 
 #Investigation into oesophageal cells; includes comparison of sub clusters with neoblast cells.
 
@@ -101,12 +103,13 @@ stat <- cbind(genes, names)
 stat <- data.frame(stat)
 num <- 1:8
 
-fileConn<-file("og_vs_neo_stats.txt")
-sink(fileConn, append=TRUE)
 
 dat2 <- seurat_og_neo@assays[["integrated"]]@scale.data
 dat2 <- data.frame(dat2)
 
+
+fileConn<-file("og_vs_neo_stats.txt")
+sink(fileConn, append=TRUE)
 for (i in num){
   
   n <- stat$names[i]
@@ -140,6 +143,9 @@ for (i in num){
     geom_jitter(width=0.15, alpha=0.5) +
     stat_compare_means(comparisons = my_comparisons, hide.ns = FALSE, label = 'p.signif', paired = FALSE))
   
+ 
+  
+  
   #Anova to compare expression across the three clusters:
   mod <- aov(expression ~ cluster, data = ogandneo)
   #View anova:
@@ -148,7 +154,8 @@ for (i in num){
   print(TukeyHSD(mod))
   
   #Check normality:
-  assign(paste("hist", i, sep = ''), as.ggplot(~hist(mod$residuals)))
+  assign(paste("hist", i, sep = ''), as.ggplot(~qqPlot(mod$residuals)))
+  
   #Check equal varience:
   assign(paste("box", i, sep = ''), as.ggplot(~boxplot(expression ~ cluster, data = ogandneo)))
   
@@ -160,8 +167,8 @@ for (i in num){
                        p.adjust.method = "none", paired = FALSE))
   
 }
-close(fileConn)
 sink()
+close(fileConn)
 statplot <- ggarrange(Plot1, hist1, box1, Plot2, hist2, box2, Plot3, hist3, box3, Plot4,  hist4, box4, ncol=3, nrow=4)
 statplot2 <- ggarrange(Plot5, hist5, box5, Plot6,  hist6, box6, Plot7, hist7, box7, Plot8, hist8, box8, ncol=3, nrow=4)
 plot(statplot)
@@ -172,7 +179,163 @@ png("og_vs_neo_stats_2.png", width = 470, height = 800)
 plot(statplot2)
 dev.off()
   
+## stats loop that writes a table
+names <- list()
+ids <- list()
+lower <- list()
+neoblast <- list()
+upper <- list()
+FvalANOVA <- list()
+PvalANOVA <- list()
+Tukey_Pval_neoblast_lower <- list()
+Tukey_Pval_upper_lower <- list()
+Tukey_Pval_upper_neoblast <- list()
+KruskalWallis <- list()
+PvalKruskal <- list()
+Wilcox_Pval_neoblast_lower <- list()
+Wilcox_Pval_upper_lower <- list()
+Wilcox_Pval_upper_neoblast <- list()
 
+for (i in num){
+  
+  n <- stat$names[i]
+  names <- append(names, n)
+  id <- stat$genes[i]
+  ids <- append(ids, id)
+
+  # 
+   newdat2 <- dat2[id,]
+  # 
+   cn2 <- colnames(newdat2)
+  # 
+   setDT(newdat2, keep.rownames = TRUE)[]
+  # 
+   ognbcountdf <- pivot_longer(newdat2, cols = cn2, names_to = "cell")
+  # 
+   colnames(ognbcountdf) <- c('ID', 'cell', 'expression')
+  # 
+   ogandneo <- merge(ognbcountdf, neo_og_cells, by = 'cell')
+  # 
+
+   m <- ogandneo %>% 
+          group_by(cluster) %>% 
+          summarise(mean(expression))
+   
+  l <- m$`mean(expression)`[1]
+  lower <- append(lower, l)
+  n <- m$`mean(expression)`[2]
+  neoblast <- append(neoblast, n)
+  u <- m$`mean(expression)`[3]
+  upper <- append(upper,u)
+
+   mod <- aov(expression ~ cluster, data = ogandneo)
+
+   sum <- summary(mod)
+   f <- sum[[1]][["F value"]][1]
+   FvalANOVA <- append(f, FvalANOVA)
+   p <- sum[[1]][["Pr(>F)"]][1]
+   PvalANOVA <- append(p, PvalANOVA)
+   
+  tukey <- TukeyHSD(mod)
+  tukeydf <- data.frame(tukey$cluster)
+  n_l <- tukeydf$p.adj[1]
+  Tukey_Pval_neoblast_lower<- append(Tukey_Pval_neoblast_lower, n_l)
+  u_l <- tukeydf$p.adj[2]
+  Tukey_Pval_upper_lower <- append(Tukey_Pval_upper_lower, u_l)
+  u_n <- tukeydf$p.adj[3]
+  Tukey_Pval_upper_neoblast <- append(Tukey_Pval_upper_neoblast, u_n)
+ 
+    k <- kruskal.test(expression ~ cluster, data = ogandneo)
+    chi2 <- k[["statistic"]][["Kruskal-Wallis chi-squared"]]
+    KruskalWallis <- append(KruskalWallis, chi2)
+    pkw <- k[["p.value"]]
+    PvalKruskal <- append(PvalKruskal, pkw)
+    
+   w <- pairwise.wilcox.test(ogandneo$expression, ogandneo$cluster,
+                              p.adjust.method = "none", paired = FALSE)
+  
+  
+   wdf <- data.frame(w$p.value)
+   w_nl <- wdf$lower[1]
+   Wilcox_Pval_neoblast_lower <- append(Wilcox_Pval_neoblast_lower, w_nl)
+   w_ul <- wdf$lower[2]
+   Wilcox_Pval_upper_lower <- append(Wilcox_Pval_upper_lower, w_ul)
+   w_un <- wdf$neoblast[2]
+   Wilcox_Pval_upper_neoblast <- append(Wilcox_Pval_upper_neoblast, w_un)
+   
+   up <- filter(ogandneo, ogandneo$cluster == "upper")
+   lo <- filter(ogandneo, ogandneo$cluster == "lower")
+   neo <- filter(ogandneo, ogandneo$cluster == "neoblast")
+   
+   wuplo <- wilcox.test(up$expression, lo$expression)
+   wilcox_Wval_upper_lower <- append(wilcox_Wval_upper_lower, wuplo[["statistic"]])
+   wupneo <- wilcox.test(up$expression, neo$expression)
+   wloneo <- wilcox.test(lo$expression, neo$expression)
+  
+}
+
+
+upper <- as.numeric(upper)
+upper <- round(upper, digits = 2)
+
+lower <- as.numeric(lower)
+lower <- round(lower, digits = 2)
+
+neoblast<- as.numeric(neoblast)
+neoblast <- round(neoblast, digits = 2)
+
+FvalANOVA<- as.numeric(FvalANOVA)
+FvalANOVA <- round(FvalANOVA, digits = 0)
+
+PvalANOVA<- as.numeric(PvalANOVA)
+PvalANOVA<- round(PvalANOVA, digits = 4)
+
+Tukey_Pval_neoblast_lower<- as.numeric(Tukey_Pval_neoblast_lower)
+Tukey_Pval_neoblast_lower<- round(Tukey_Pval_neoblast_lower, digits = 4)
+
+Tukey_Pval_upper_lower<- as.numeric(Tukey_Pval_upper_lower)
+Tukey_Pval_upper_lower<- round(Tukey_Pval_upper_lower, digits = 4)
+
+Tukey_Pval_upper_neoblast<- as.numeric(Tukey_Pval_upper_neoblast)
+Tukey_Pval_upper_neoblast<- round(Tukey_Pval_upper_neoblast, digits = 4)
+
+KruskalWallis<- as.numeric(KruskalWallis)
+KruskalWallis<- round(KruskalWallis, digits = 0)
+
+PvalKruskal<- as.numeric(PvalKruskal)
+PvalKruskal<- round(PvalKruskal, digits = 4)
+
+Wilcox_Pval_neoblast_lower<- as.numeric(Wilcox_Pval_neoblast_lower)
+Wilcox_Pval_neoblast_lower<- round(Wilcox_Pval_neoblast_lower, digits = 4)
+
+Wilcox_Pval_upper_lower<- as.numeric(Wilcox_Pval_upper_lower)
+Wilcox_Pval_upper_lower<- round(Wilcox_Pval_upper_lower, digits = 4)
+
+Wilcox_Pval_upper_neoblast<- as.numeric(Wilcox_Pval_upper_neoblast)
+Wilcox_Pval_upper_neoblast<- round(Wilcox_Pval_upper_neoblast, digits = 4)
+
+s_df <- rbind(names,
+              ids,
+              upper,
+              lower,
+              neoblast,
+              FvalANOVA,
+              PvalANOVA,
+              Tukey_Pval_neoblast_lower,
+              Tukey_Pval_upper_lower,
+              Tukey_Pval_upper_neoblast,
+              KruskalWallis, 
+              PvalKruskal, 
+              Wilcox_Pval_neoblast_lower, 
+              Wilcox_Pval_upper_lower, 
+              Wilcox_Pval_upper_neoblast)
+
+s_df <- data.frame(s_df)
+s_df<- rotate_df(s_df)
+
+#write.csv(s_df, "OgvsNeo_stats_table.csv")
+
+##
 
 #Further analysis by investigating expression of associated oesophageal proteins across the sub-clusters of cells:
 #Add sub-cluster labelling to Seurat object:
@@ -203,11 +366,14 @@ colnames(eso_proteins) <- c('name', 'ID')
 eso_proteinsflip <- eso_proteins
 eso_proteinsflip <- eso_proteinsflip %>% map_df(rev)
 
+#write_xlsx(eso_proteinsflip, "eso_proteinsflip.xlsx") 
 
+eso_proteinsflipSD <- read.csv("eso_proteinsflipSD.csv")
+colnames(eso_proteinsflipSD) <- c('name', 'ID')
 #Heatmap using scale.data
 DoHeatmap(object = seurat_sub, group.by= 'cluster', features = eso_proteins$ID, draw.lines = TRUE)+ 
     scale_fill_gradientn(colours = c('blue', 'black', 'orange')) +
-  scale_y_discrete(labels = eso_proteinsflip$name)
+  scale_y_discrete(labels = eso_proteinsflipSD$name)
 
 
 #It is decided that the upper cluster resembles oesophageal cells more than neoblast so will not be removed from the data before reclustering. 
@@ -222,11 +388,13 @@ DoHeatmap(object = seurat_sub, group.by= 'cluster', features = eso_proteins$ID, 
 
 num <- 1:71
 
+dat2 <- seurat_sub@assays[["integrated"]]@scale.data
+dat2 <- data.frame(dat2)
+
 fileConn<-file("original_cluster_stats_OG.txt")
 sink(fileConn, append=TRUE)
 
-dat2 <- seurat_sub@assays[["integrated"]]@scale.data
-dat2 <- data.frame(dat2)
+
 for (i in num){
   
   n <- eso_proteins$name[i]
@@ -265,8 +433,8 @@ for (i in num){
   
   ogupper <- filter(ogdata, cluster == "upper")
   oglower <- filter(ogdata, cluster == "lower")
-  assign(paste("histu", i, sep = ''), as.ggplot(~hist(ogupper$expression)))
-  assign(paste("histl", i, sep = ''), as.ggplot(~hist(oglower$expression)))
+  assign(paste("histu", i, sep = ''), as.ggplot(~qqPlot(ogupper$expression)))
+  assign(paste("histl", i, sep = ''), as.ggplot(~qqPlot(oglower$expression)))
   
   
   #check equal varience 
@@ -284,8 +452,9 @@ for (i in num){
   print(wilcox.test(expression ~ cluster, data = ogdata))
   
 }
-close(fileConn)
 sink()
+close(fileConn)
+
 
 statplot <- ggarrange(Plot1,histu1,histl1, Plot2,histu2,histl2, Plot3,histu3,histl3, Plot4,histu4,histl4, Plot5,histu5,histl5,  Plot6,histu6,histl6, Plot7,histu7,histl7, Plot8,histu8,histl8, Plot9,histu9,histl9, Plot10,histu10,histl10, Plot11,histu11,histl11, Plot12,histu12,histl12, Plot13,histu13,histl13, Plot14,histu14,histl14, Plot15,histu15,histl15,Plot16,histu16,histl16, Plot17,histu17,histl17, Plot18,histu18,histl18, Plot19,histu19,histl19, Plot20,histu20,histl20,Plot21,histu21,histl21, Plot22,histu22,histl22, Plot23,histu23,histl23, Plot24,histu24,histl24, Plot25,histu25,histl25,Plot26,histu26,histl26, Plot27,histu27,histl27, Plot28,histu28,histl28, Plot29,histu29,histl29, Plot30,histu30,histl30, Plot31,histu31,histl31, Plot32,histu32,histl32, Plot33,histu33,histl33, Plot34,histu34,histl34, Plot35,histu35,histl35, Plot36,histu36,histl36, Plot37,histu37,histl37, Plot38,histu38,histl38, Plot39,histu39,histl39, Plot40,histu40,histl40, Plot41,histu41,histl41, Plot42,histu42,histl42, Plot43,histu43,histl43, Plot44,histu44,histl44, Plot45,histu45,histl45, Plot46,histu46,histl46, Plot47,histu47,histl47, Plot48,histu48,histl48, Plot49,histu49,histl49, Plot50,histu50,histl50, Plot51,histu51,histl51, Plot52,histu52,histl52, Plot53,histu53,histl53, Plot54,histu54,histl54, Plot55,histu55,histl55, Plot56,histu56,histl56, Plot57,histu57,histl57, Plot58,histu58,histl58, Plot59,histu59,histl59, Plot60,histu60,histl60, Plot61,histu61,histl61, Plot62,histu62,histl62, Plot63,histu63,histl63, Plot64,histu64,histl64, Plot65,histu65,histl65, Plot66,histu66,histl66, Plot67,histu67,histl67, Plot68,histu68,histl68, Plot69,histu69,histl69, Plot70,histu70,histl70, Plot71,histu71,histl71,ncol=3, nrow=4)
 #graph saving:
@@ -363,6 +532,91 @@ plot(statplot$`18`)
 dev.off()
 
 #####
+#write stats into table
+names <- list()
+ids <- list()
+lower <- list()
+upper <- list()
+Tval <- list()
+PvalTtest <- list()
+Wilcoxon_Pval <- list()
+
+for (i in num){
+  
+  n <- eso_proteins$name[i]
+  names <- append(names, n)
+  id <- eso_proteins$ID[i]
+  ids <- append(ids, id)
+  #print(paste('Stats for gene', n, id))
+  
+  newdat2 <- dat2[id,]
+  
+  cn2 <- colnames(newdat2)
+  
+  setDT(newdat2, keep.rownames = TRUE)[]
+  
+  ogcountdf <- pivot_longer(newdat2, cols = cn2, names_to = "cell")
+  
+  colnames(ogcountdf) <- c('ID', 'cell', 'expression')
+  
+  ogdata <- merge(ogcountdf, cluster_df, by = 'cell')
+  
+  #Mean expression for each group:
+  #print('Mean expression:')
+     m <- ogdata %>% 
+            group_by(cluster) %>% 
+            summarise(mean(expression))  
+     
+     l <- m$`mean(expression)`[1]
+     lower <- append(lower, l)
+     u <- m$`mean(expression)`[2]
+     upper <- append(upper,u)
+     
+  ttest <- t.test(data = ogdata,
+               expression ~ cluster,
+               var.equal = T)
+  tv <- ttest[["statistic"]][["t"]]
+  Tval <- append(tv, Tval)
+  pv <- ttest[["p.value"]]
+  PvalTtest <- append(pv, PvalTtest)
+  
+  #non parametric alternative:
+  #print('Non-parametric unpaired two-sample Wilcoxon test:')
+  w <- wilcox.test(expression ~ cluster, data = ogdata)
+  wdf <- data.frame(w$p.value)
+  w_ul <- wdf$w.p.value[1]
+  Wilcoxon_Pval <- append(Wilcoxon_Pval, w_ul)
+}
+
+upper <- as.numeric(upper)
+upper <- round(upper, digits = 2)
+
+lower <- as.numeric(lower)
+lower <- round(lower, digits = 2)
+
+Tval<- as.numeric(Tval)
+Tval <- round(Tval, digits = 0)
+
+PvalTtest<- as.numeric(PvalTtest)
+PvalTtest<- round(PvalTtest, digits = 4)
+
+Wilcoxon_Pval<- as.numeric(Wilcoxon_Pval)
+Wilcoxon_Pval<- round(Wilcoxon_Pval, digits = 4)
+
+s_df2 <- rbind(names,
+              ids,
+              upper,
+              lower,
+              Tval,
+              PvalTtest,
+              Wilcoxon_Pval
+              )
+
+s_df2 <- data.frame(s_df2)
+s_df2<- rotate_df(s_df2)
+
+#write_xlsx(s_df2, "OGcluster_stat_table.xlsx")
+
 #Re-cluster the lower cluster and assess differencial expression that may indicate anterior/posterior tissues.
 
 
@@ -403,18 +657,20 @@ DimPlot(seurat_sub, reduction = "umap", pt.size = 3, group.by = "cluster" )
 eso_proteinsflip <- eso_proteins
 eso_proteinsflip <- eso_proteinsflip %>% map_df(rev)
 
+#write_xlsx(eso_proteinsflip, "eso_proteinsflip.xlsx") 
+
+eso_proteinsflipRCSD <- read.csv("eso_proteinsflipRCSD.csv")
+colnames(eso_proteinsflipRCSD) <- c('name', 'ID')
+
 DoHeatmap(object = seurat_sub, features = eso_proteins$ID, group.by = "seurat_clusters", assay = 'RNA', slot = "scale.data", group.colors = c('#7AD169', '#928DE0', '#FAA637')) +
   scale_fill_gradientn(colours = c('blue', 'black', 'orange'), breaks=c(-3,-2,-1,0,1,2,3),labels=c(-3,-2,-1,0,1,2,3),limits=c(-2.5,2.5)) +
-  scale_y_discrete(labels = eso_proteinsflip$name) 
+  scale_y_discrete(labels = eso_proteinsflipRCSD$name) 
 
 
 #Compare expression of specific proteins across new clusters:
 
 
 #pick genes fro comparison 
-
-fileConn<-file("recluster_stats_OG.txt")
-sink(fileConn, append=TRUE)
 
 dat2 <- seurat_sub@assays[["RNA"]]@scale.data
 dat2 <- data.frame(dat2)
@@ -423,6 +679,9 @@ ogdf <- data.frame(og)
 setDT(ogdf, keep.rownames = TRUE)[]
 colnames(ogdf) <- c("cell", "cluster")
 ogdf$cluster <- as.factor(ogdf$cluster)
+
+fileConn<-file("recluster_stats_OG.txt")
+sink(fileConn, append=TRUE)
 
 num <- 1:71
 for (i in num){
@@ -466,7 +725,7 @@ for (i in num){
   print(TukeyHSD(mod))
   
   #Check normality:
-  assign(paste("hist", i, sep = ''), as.ggplot(~hist(mod$residuals)))
+  assign(paste("hist", i, sep = ''), as.ggplot(~qqPlot(mod$residuals)))
   #Check equal varience:
   assign(paste("box", i, sep = ''), as.ggplot(~boxplot(expression ~ cluster, data = ogdata)))
   
@@ -474,7 +733,7 @@ for (i in num){
   print("Non-parametric - Kruskal Wallis and unpaired Wilcox test:")
   #If varience isnt equal: Welch's anova 
   print(kruskal.test(expression ~ cluster, data = ogdata))
-  print(pairwise.wilcox.test(ogandneo$expression, ogdata$cluster,
+  print(pairwise.wilcox.test(ogdata$expression, ogdata$cluster,
                              p.adjust.method = "none", paired = FALSE))
 }
 
@@ -559,6 +818,155 @@ png("recluster_statsplot_OG_18.png", width = 470, height = 800)
 plot(statplot$`18`)
 dev.off()
 
+## stats that write to table ##
+num <- 1:71
+
+## loop to write stats to table 
+names <- list()
+ids <- list()
+zero <- list()
+one <- list()
+two <- list()
+FvalANOVA <- list()
+PvalANOVA <- list()
+Tukey_Pval_zero_one <- list()
+Tukey_Pval_one_two <- list()
+Tukey_Pval_two_zero <- list()
+KruskalWallis <- list()
+PvalKruskal <- list()
+Wilcox_Pval_zero_one <- list()
+Wilcox_Pval_two_zero <- list()
+Wilcox_Pval_two_one <- list()
+
+for (i in num){
+  
+  n <- eso_proteins$name[i]
+  names <- append(names, n)
+  id <- eso_proteins$ID[i]
+  ids <- append(ids, id)
+  
+  newdat2 <- dat2[id,]
+  
+  cn2 <- colnames(newdat2)
+  
+  setDT(newdat2, keep.rownames = TRUE)[]
+  
+  ogcountdf <- pivot_longer(newdat2, cols = cn2, names_to = "cell")
+  
+  colnames(ogcountdf) <- c('ID', 'cell', 'expression')
+  
+  ogdata <- merge(ogcountdf, ogdf, by = 'cell')
+  
+  #Mean expression for each group:
+  m <- ogdata %>% 
+        group_by(cluster) %>% 
+        summarise(mean(expression))
+  
+  z <- m$`mean(expression)`[1]
+  zero <- append(zero, z)
+  o <- m$`mean(expression)`[2]
+  one <- append(one, o)
+  t <- m$`mean(expression)`[3]
+  two <- append(two, t)
+  
+  #Anova to compare expression across the three clusters:
+  mod <- aov(expression ~ cluster, data = ogdata)
+  #View anova:
+  sum <- summary(mod)
+  f <- sum[[1]][["F value"]][1]
+  FvalANOVA <- append(f, FvalANOVA)
+  p <- sum[[1]][["Pr(>F)"]][1]
+  PvalANOVA <- append(p, PvalANOVA)
+  
+  tukey <- TukeyHSD(mod)
+  tukeydf <- data.frame(tukey$cluster)
+  z_o <- tukeydf$p.adj[1]
+  Tukey_Pval_zero_one<- append(Tukey_Pval_zero_one, z_o)
+  z_t <- tukeydf$p.adj[2]
+  Tukey_Pval_one_two <- append(Tukey_Pval_zero_two, z_t)
+  t_o <- tukeydf$p.adj[3]
+  Tukey_Pval_two_zero <- append(Tukey_Pval_two_one, t_o)
+  
+  k <- kruskal.test(expression ~ cluster, data = ogdata)
+  chi2 <- k[["statistic"]][["Kruskal-Wallis chi-squared"]]
+  KruskalWallis <- append(KruskalWallis, chi2)
+  pkw <- k[["p.value"]]
+  PvalKruskal <- append(PvalKruskal, pkw)
+  
+  w <- pairwise.wilcox.test(ogdata$expression, ogdata$cluster,
+                             p.adjust.method = "none", paired = FALSE)
+  wdf <- data.frame(w$p.value)
+  w_zo <- wdf$X0[1]
+  Wilcox_Pval_zero_one <- append(Wilcox_Pval_zero_one, w_zo)
+  w_ot <- wdf$X1[2]
+  Wilcox_Pval_one_two <- append(Wilcox_Pval_one_two, w_ot)
+  w_tz <- wdf$X0[2]
+  Wilcox_Pval_two_zero <- append(Wilcox_Pval_two_zero, w_tz)
+
+}
+
+zero <- as.numeric(zero)
+zero <- round(zero, digits = 2)
+
+one <- as.numeric(one)
+one <- round(one, digits = 2)
+
+two <- as.numeric(two)
+two <- round(two, digits = 2)
+
+FvalANOVA<- as.numeric(FvalANOVA)
+FvalANOVA <- round(FvalANOVA, digits = 0)
+
+PvalANOVA<- as.numeric(PvalANOVA)
+PvalANOVA<- round(PvalANOVA, digits = 4)
+
+Tukey_Pval_zero_one<- as.numeric(Tukey_Pval_zero_one)
+Tukey_Pval_zero_one<- round(Tukey_Pval_zero_one, digits = 4)
+
+Tukey_Pval_two_one<- as.numeric(Tukey_Pval_two_one)
+Tukey_Pval_two_one<- round(Tukey_Pval_one_two, digits = 4)
+
+Tukey_Pval_two_zero<- as.numeric(Tukey_Pval_two_zero)
+Tukey_Pval_two_zero<- round(Tukey_Pval_two_zero, digits = 4)
+
+KruskalWallis<- as.numeric(KruskalWallis)
+KruskalWallis<- round(KruskalWallis, digits = 0)
+
+PvalKruskal<- as.numeric(PvalKruskal)
+PvalKruskal<- round(PvalKruskal, digits = 4)
+
+Wilcox_Pval_zero_one<- as.numeric(Wilcox_Pval_zero_one)
+Wilcox_Pval_zero_one<- round(Wilcox_Pval_zero_one, digits = 4)
+
+Wilcox_Pval_one_two<- as.numeric(Wilcox_Pval_one_two)
+Wilcox_Pval_one_two<- round(Wilcox_Pval_one_two, digits = 4)
+
+Wilcox_Pval_two_zero<- as.numeric(Wilcox_Pval_two_zero)
+Wilcox_Pval_two_zero<- round(Wilcox_Pval_two_zero, digits = 4)
+
+s_df3 <- rbind(names,
+              ids,
+              zero,
+              one,
+              two,
+              FvalANOVA,
+              PvalANOVA,
+              Tukey_Pval_zero_one,
+              Tukey_Pval_two_zero,
+              Tukey_Pval_two_one,
+              KruskalWallis, 
+              PvalKruskal, 
+              Wilcox_Pval_zero_one, 
+              Wilcox_Pval_one_two, 
+              Wilcox_Pval_two_zero)
+
+s_df3 <- data.frame(s_df3)
+s_df3<- rotate_df(s_df3)
+
+#write_xlsx(s_df3, "OGrecluster_stats_table.xlsx")
+
+
+
 ######
 #2. Find markers that dinstunguish the sub clusters from each other:
 #In general, an AUC of 0.5 suggests no discrimination (i.e., ability to diagnose patients with and without the disease or condition based on the test), 0.7 to 0.8 is considered acceptable, 0.8 to 0.9 is considered excellent, and more than 0.9 is considered outstanding.
@@ -577,8 +985,65 @@ DoHeatmap(object = seurat_sub, features = markersOG$gene, group.by = "seurat_clu
   scale_y_discrete(labels = markersflipped$name)
 
 #3. Plot markers on whole cell umap
+num <- 1:26
+all.genes <- rownames(seurat_object)
+seurat_sub <- ScaleData(seurat_object, features = all.genes)
+
+for (i in num){
+  png(sprintf("%s.png", paste('markervln', i)), width = 850, height = 500)
+  plot(VlnPlot(seurat_object, features = markersannotatedOG$gene[i], pt.size = 0) +
+                                            theme(legend.position = "none", axis.text.x = element_text(angle = 90), plot.title = element_text(size=10))+
+                                            labs(title = paste(markersannotatedOG$name[i],"\n", markersannotatedOG$gene[i])))
+  dev.off()
+}
 
 
+#need to change for slot thats not scale data
+# for (i in num){
+#   
+#   plot(FeaturePlot(seurat_object, features = markersannotatedOG$gene[i], pt.size = 0.5) +
+#                                               scale_colour_gradientn(colours = c("#ABD9E9", "#E0F3F8", "#FDAE61", "#F46D43", "#D73027"), breaks=c(-2,0,2,4,6,8,10),labels=c(-2,0,2,4,6,8,10),limits=c(-2,10), name = paste('Expression')) +
+#                                               theme(plot.title = element_text(size=10))+
+#                                               labs(title = paste(markersannotatedOG$name[i],"\n", markersannotatedOG$gene[i])))
+#   
+#   dev.off()
+# }
+
+
+#SAVE PLOTS
+
+genes <- c('Smp-051920','Smp-105360','Smp-175590','Smp-125320','Smp-010550', 'Smp-172180', 'Smp-085840', 'Smp-124000')
+names <- c('nanos-2','notch','fgfra','meg-9','meg-15', 'meg-8.2', 'meg-4.2','meg-14')
+stat <- cbind(genes, names)
+stat <- data.frame(stat)
+num <- 1:8
+#550 550
+for (i in num){
+  png(sprintf("%s.png", paste('reclusterOG', i)), width = 450, height = 450)
+  plot(FeaturePlot(seurat_sub, features = stat$genes[i],  slot = 'data', pt.size = 2) + 
+    labs(title = paste(stat$names[i],"\n", stat$genes[i]) )+
+    theme(plot.title = element_text(size=10)))
+  dev.off()
+} 
+
+for (i in num){
+  png(sprintf("%s.png", paste('reclusterOGvln', i)), width = 850, height = 500)
+  plot(VlnPlot(seurat_sub, features = stat$genes[i], pt.size = 0.2, cols = c('#7AD169', '#928DE0', '#FAA637')) +
+         theme(legend.position = "none", plot.title = element_text(size=10))+
+         labs(title = paste(stat$names[i],"\n", stat$genes[i])))
+  dev.off()
+}
+
+markersannotatedOG$name
+num <- 1:26
+for (i in num){
+  png(sprintf("%s.png", paste('OGmarker', i)), width = 530, height = 430)
+  plot(FeaturePlot(seurat_object, features = markersannotatedOG$gene[i], slot = 'scale.data') + 
+         scale_colour_gradientn(colours = c("#74acd1", "#dff3f8", "#fddf90", "#fcad60", "#F46D43", "#d62f27", "#a40025"), breaks=c(-2,0,2,4,6,8,10),labels=c(-2,0,2,4,6,8,10),limits=c(-2,10), na.value = 'white', name = paste('Expression', '\n', 'Z-score')) +
+         labs(title = paste(markersannotatedOG$name[i],"\n", markersannotatedOG$gene[i]))+
+         theme(plot.title = element_text(size=11)))
+  dev.off()
+}
 
 
 

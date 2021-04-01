@@ -23,7 +23,7 @@ library(ggsignif)
 library(ggpubr)
 library(grid)
 library(ggplotify)
-
+library(sjmisc)
 
 #####
 seurat_object <- readRDS("data/GSE146736_adult_scseq_seurat.rds")
@@ -113,7 +113,7 @@ neo_cells <- cbind(coord2, cluster)
 colnames(neo_cells) <- c('cell', 'UMAP_1', 'UMAP_2', 'cluster')
 neo_teg_cells <- rbind(cluster_df, neo_cells)
 
-#make a seurat object with Og and Neo cells, then re scale.
+#make a seurat object with teg and Neo cells, then re scale.
 allcells <- neo_teg_cells$cell
 seurat_teg_neo <- subset(seurat_object, cells = allcells)
 all.genes <- rownames(seurat_teg_neo)
@@ -174,7 +174,7 @@ for (i in num){
   print(TukeyHSD(mod))
   
   #Check normality:
-  assign(paste("hist", i, sep = ''), as.ggplot(~hist(mod$residuals)))
+  assign(paste("hist", i, sep = ''), as.ggplot(~qqPlot(mod$residuals)))
   #Check equal varience:
   assign(paste("box", i, sep = ''), as.ggplot(~boxplot(expression ~ cluster, data = tegandneo)))
   
@@ -189,6 +189,7 @@ for (i in num){
 sink()
 close(fileConn)
 
+
 statplot <- ggarrange(Plot1, hist1, box1, Plot2, hist2, box2, Plot3, hist3, box3, Plot4,  hist4, box4, ncol=3, nrow=4)
 statplot2 <- ggarrange(Plot5, hist5, box5, ncol=3, nrow=4)
 plot(statplot)
@@ -199,9 +200,212 @@ png("teg_vs_neo_stats_2.png", width = 470, height = 800)
 plot(statplot2)
 dev.off()
 plot(Plot1)
-###############
+
+##### write stats to table
+names <- list()
+ids <- list()
+lower1 <- list()
+neoblast <- list()
+upper1 <- list()
+upper2 <- list()
+FvalANOVA <- list()
+PvalANOVA <- list()
+Tukey_Pval_neoblast_lower1 <- list()
+Tukey_Pval_upper1_lower1 <- list()
+Tukey_Pval_upper2_lower1 <- list()
+Tukey_Pval_upper1_neoblast <- list()
+Tukey_Pval_upper2_neoblast <- list()
+Tukey_Pval_upper2_upper1 <- list()
+KruskalWallis <- list()
+PvalKruskal <- list()
+Wilcox_Pval_neoblast_lower1 <- list()
+Wilcox_Pval_upper1_lower1 <- list()
+Wilcox_Pval_upper2_lower1 <- list()
+Wilcox_Pval_upper1_neoblast <- list()
+Wilcox_Pval_upper2_neoblast <- list()
+Wilcox_Pval_upper2_upper1 <- list()
+
+for (i in num){
+  
+  n <- stat$names[i]
+  names <- append(names, n)
+  id <- stat$genes[i]
+  ids <- append(ids, id)
+  
+
+  newdat2 <- dat2[id,]
+  
+  cn2 <- colnames(newdat2)
+  
+  setDT(newdat2, keep.rownames = TRUE)[]
+  
+  tegnbcountdf <- pivot_longer(newdat2, cols = cn2, names_to = "cell")
+  
+  colnames(tegnbcountdf) <- c('ID', 'cell', 'expression')
+  
+  tegandneo <- merge(tegnbcountdf, neo_teg_cells, by = 'cell')
+  
+  #Mean expression for each group:
+  #print('Mean expression:')
+  m <- tegandneo %>% 
+          group_by(cluster) %>% 
+          summarise(mean(expression))
+  
+  l1 <- m$`mean(expression)`[1]
+  lower1 <- append(lower1, l1)
+  n <- m$`mean(expression)`[2]
+  neoblast <- append(neoblast, n)
+  u1 <- m$`mean(expression)`[3]
+  upper1 <- append(upper1,u1)
+  u2 <- m$`mean(expression)`[4]
+  upper2 <- append(upper2,u2)
+  
+  #Anova to compare expression across the three clusters:
+  mod <- aov(expression ~ cluster, data = tegandneo)
+  #View anova:
+  sum <- summary(mod)
+  f <- sum[[1]][["F value"]][1]
+  FvalANOVA <- append(f, FvalANOVA)
+  p <- sum[[1]][["Pr(>F)"]][1]
+  PvalANOVA <- append(p, PvalANOVA)
+  
+  tukey <- TukeyHSD(mod)
+  tukeydf <- data.frame(tukey$cluster)
+  n_l1 <- tukeydf$p.adj[1]
+  Tukey_Pval_neoblast_lower1<- append(Tukey_Pval_neoblast_lower1, n_l1)
+  
+  u1_l1 <- tukeydf$p.adj[2]
+  Tukey_Pval_upper1_lower1 <- append(Tukey_Pval_upper1_lower1, u1_l1)
+  
+  u2_l1 <- tukeydf$p.adj[2]
+  Tukey_Pval_upper2_lower1 <- append(Tukey_Pval_upper2_lower1, u2_l1)
+  
+  u1_n <- tukeydf$p.adj[3]
+  Tukey_Pval_upper1_neoblast <- append(Tukey_Pval_upper1_neoblast, u1_n)
+  
+  u2_n <- tukeydf$p.adj[3]
+  Tukey_Pval_upper2_neoblast <- append(Tukey_Pval_upper2_neoblast, u2_n)
+  
+  u2_u1 <- tukeydf$p.adj[2]
+  Tukey_Pval_upper2_upper1 <- append(Tukey_Pval_upper2_upper1, u2_u1)
+  
+  k<- kruskal.test(expression ~ cluster, data = tegandneo)
+  chi2 <- k[["statistic"]][["Kruskal-Wallis chi-squared"]]
+  KruskalWallis <- append(KruskalWallis, chi2)
+  pkw <- k[["p.value"]]
+  PvalKruskal <- append(PvalKruskal, pkw)
+  
+  w <- pairwise.wilcox.test(tegandneo$expression, tegandneo$cluster,
+                             p.adjust.method = "none", paired = FALSE)
+  wdf <- data.frame(w$p.value)
+  w_nl1 <- wdf$lower1[1]
+  Wilcox_Pval_neoblast_lower1 <- append(Wilcox_Pval_neoblast_lower1, w_nl1)
+  
+  w_u1l1 <- wdf$lower1[2]
+  Wilcox_Pval_upper1_lower1 <- append(Wilcox_Pval_upper1_lower1, w_u1l1)
+  
+  w_u2l1 <- wdf$lower1[3]
+  Wilcox_Pval_upper2_lower1 <- append(Wilcox_Pval_upper2_lower1, w_u2l1)
+  
+  w_u1n <- wdf$neoblast[2]
+  Wilcox_Pval_upper1_neoblast <- append(Wilcox_Pval_upper1_neoblast, w_u1n)
+  
+  w_u2n <- wdf$neoblast[3]
+  Wilcox_Pval_upper2_neoblast <- append(Wilcox_Pval_upper2_neoblast, w_u2n)
+  
+  w_u2u1 <- wdf$upper1[3]
+  Wilcox_Pval_upper2_upper1 <- append(Wilcox_Pval_upper2_upper1, w_u2u1)
+  
+}
 
 
+upper1 <- as.numeric(upper1)
+upper1 <- round(upper1, digits = 2)
+
+upper2 <- as.numeric(upper2)
+upper2 <- round(upper2, digits = 2)
+
+lower1 <- as.numeric(lower1)
+lower1 <- round(lower1, digits = 2)
+
+neoblast<- as.numeric(neoblast)
+neoblast <- round(neoblast, digits = 2)
+
+FvalANOVA<- as.numeric(FvalANOVA)
+FvalANOVA <- round(FvalANOVA, digits = 0)
+
+PvalANOVA<- as.numeric(PvalANOVA)
+PvalANOVA<- round(PvalANOVA, digits = 4)
+
+Tukey_Pval_neoblast_lower1<- as.numeric(Tukey_Pval_neoblast_lower1)
+Tukey_Pval_neoblast_lower1<- round(Tukey_Pval_neoblast_lower1, digits = 4)
+
+Tukey_Pval_upper1_lower1<- as.numeric(Tukey_Pval_upper1_lower1)
+Tukey_Pval_upper1_lower1<- round(Tukey_Pval_upper1_lower1, digits = 4)
+
+Tukey_Pval_upper2_lower1<- as.numeric(Tukey_Pval_upper2_lower1)
+Tukey_Pval_upper2_lower1<- round(Tukey_Pval_upper2_lower1, digits = 4)
+
+Tukey_Pval_upper1_neoblast<- as.numeric(Tukey_Pval_upper1_neoblast)
+Tukey_Pval_upper1_neoblast<- round(Tukey_Pval_upper1_neoblast, digits = 4)
+
+Tukey_Pval_upper2_neoblast<- as.numeric(Tukey_Pval_upper2_neoblast)
+Tukey_Pval_upper2_neoblast<- round(Tukey_Pval_upper2_neoblast, digits = 4)
+
+Tukey_Pval_upper2_upper1<- as.numeric(Tukey_Pval_upper2_upper1)
+Tukey_Pval_upper2_upper1<- round(Tukey_Pval_upper2_upper1, digits = 4)
+
+KruskalWallis<- as.numeric(KruskalWallis)
+KruskalWallis<- round(KruskalWallis, digits = 0)
+
+PvalKruskal<- as.numeric(PvalKruskal)
+PvalKruskal<- round(PvalKruskal, digits = 4)
+
+Wilcox_Pval_neoblast_lower1<- as.numeric(Wilcox_Pval_neoblast_lower1)
+Wilcox_Pval_neoblast_lower1<- round(Wilcox_Pval_neoblast_lower1, digits = 4)
+
+Wilcox_Pval_upper1_lower1<- as.numeric(Wilcox_Pval_upper1_lower1)
+Wilcox_Pval_upper1_lower1<- round(Wilcox_Pval_upper1_lower1, digits = 4)
+
+Wilcox_Pval_upper2_lower1<- as.numeric(Wilcox_Pval_upper2_lower1)
+Wilcox_Pval_upper2_lower1<- round(Wilcox_Pval_upper2_lower1, digits = 4)
+
+Wilcox_Pval_upper1_neoblast<- as.numeric(Wilcox_Pval_upper1_neoblast)
+Wilcox_Pval_upper1_neoblast<- round(Wilcox_Pval_upper1_neoblast, digits = 4)
+
+Wilcox_Pval_upper2_neoblast<- as.numeric(Wilcox_Pval_upper2_neoblast)
+Wilcox_Pval_upper2_neoblast<- round(Wilcox_Pval_upper2_neoblast, digits = 4)
+
+Wilcox_Pval_upper2_upper1<- as.numeric(Wilcox_Pval_upper2_upper1)
+Wilcox_Pval_upper2_upper1<- round(Wilcox_Pval_upper2_upper1, digits = 4)
+
+s_df <- rbind(names,
+              ids,
+              upper1,
+              upper2,
+              lower1,
+              neoblast,
+              FvalANOVA,
+              PvalANOVA,
+              Tukey_Pval_neoblast_lower1,
+              Tukey_Pval_upper1_lower1,
+              Tukey_Pval_upper1_neoblast,
+              Tukey_Pval_upper2_lower1,
+              Tukey_Pval_upper2_neoblast,
+              Tukey_Pval_upper2_upper1,
+              KruskalWallis, 
+              PvalKruskal, 
+              Wilcox_Pval_neoblast_lower1, 
+              Wilcox_Pval_upper1_lower1, 
+              Wilcox_Pval_upper1_neoblast,
+              Wilcox_Pval_upper2_lower1,
+              Wilcox_Pval_upper2_neoblast,
+              Wilcox_Pval_upper2_upper1)
+
+s_df <- data.frame(s_df)
+s_df<- rotate_df(s_df)
+
+#write_xlsx(s_df, "TegvsNeo_stats_table.xlsx")
 
 ## heatmap for all teg proteins 
 c <- cluster_df$cell 
@@ -225,7 +429,8 @@ colnames(genes) <- c('type','protein','gene_ID','table','tableName','tableID','g
 genes2 <- filter(genes, (table==2))
 genes3 <- filter(genes, (table==3))
 genesteg <- rbind(genes2, genes3)
-
+genesteg <- genesteg[,-c(1,4:10)]
+#write_xlsx(genesteg,"genesteg.xlsx")
 
 #scale_y_discrete labels from opposite way to plotting so label from an inverted dataframe
 library(purrr)
@@ -235,9 +440,15 @@ library(purrr)
 genestegflip <- genesteg
 genestegflip <- genestegflip %>% map_df(rev)
 
+write_xlsx(genestegflip, "genestegflip.xlsx") 
+
+genestegflipSD <- read.csv("genestegflipSD.csv")
+colnames(genestegflipSD) <- c('name', 'ID')
+
+
 DoHeatmap(object = seurat_teg, features = genesteg$gene_ID, group.by = "cluster", assay = 'integrated', slot = "scale.data") +
   scale_fill_gradientn(colours = c('blue','black', 'orange')) +
-  scale_y_discrete(labels = genestegflip$protein)
+  scale_y_discrete(labels = genestegflipSD$name)
 
 
 ####
@@ -255,7 +466,7 @@ sink(fileConn, append=TRUE)
 
 for (i in num){
   
-  n <- genesteg$tableName[i]
+  n <- genesteg$protein[i]
   id <- genesteg$gene_ID[i]
   
   print(paste('Stats for gene', n, id))
@@ -296,7 +507,7 @@ for (i in num){
   print(TukeyHSD(mod))
   
   #Check normality:
-  assign(paste("hist", i, sep = ''), as.ggplot(~hist(mod$residuals)))
+  assign(paste("hist", i, sep = ''), as.ggplot(~qqPlot(mod$residuals)))
   #Check equal varience:
   assign(paste("box", i, sep = ''), as.ggplot(~boxplot(expression ~ cluster, data = tegdata)))
   
@@ -315,7 +526,7 @@ statplot <- ggarrange(Plot1,hist1,box1,    Plot2,hist2,box2,    Plot3,hist3,box3
 #grpah saving
 #####
 png("original_cluster_stats_teg_1.png", width = 500, height = 700)
-plot(statplot)
+plot(statplot$`1`)
 dev.off()
 
 png("original_cluster_stats_teg_2.png", width = 500, height = 700)
@@ -382,6 +593,150 @@ png("original_cluster_stats_teg_17.png", width = 500, height = 700)
 plot(statplot$`17`)
 dev.off()
 #####
+names <- list()
+ids <- list()
+lower1 <- list()
+neoblast <- list()
+upper1 <- list()
+upper2 <- list()
+FvalANOVA <- list()
+PvalANOVA <- list()
+Tukey_Pval_upper1_lower1 <- list()
+Tukey_Pval_upper2_lower1 <- list()
+Tukey_Pval_upper2_upper1 <- list()
+KruskalWallis <- list()
+PvalKruskal <- list()
+Wilcox_Pval_upper1_lower1 <- list()
+Wilcox_Pval_upper2_lower1 <- list()
+Wilcox_Pval_upper2_upper1 <- list()
+
+for (i in num){
+  
+  n <- genesteg$protein[i]
+  names <- append(names, n)
+  id <- genesteg$gene_ID[i]
+  ids <- append(ids, id)
+  
+  newdat2 <- dat2[id,]
+  
+  cn2 <- colnames(newdat2)
+  
+  setDT(newdat2, keep.rownames = TRUE)[]
+  
+  tegcountdf <- pivot_longer(newdat2, cols = cn2, names_to = "cell")
+  
+  colnames(tegcountdf) <- c('ID', 'cell', 'expression')
+  
+  tegdata <- merge(tegcountdf, cluster_df, by = 'cell')
+  
+  m <- tegdata %>% 
+          group_by(cluster) %>% 
+          summarise(mean(expression))
+  
+  l1 <- m$`mean(expression)`[1]
+  lower1 <- append(lower1, l1)
+  u1 <- m$`mean(expression)`[2]
+  upper1 <- append(upper1, u1)
+  u2 <- m$`mean(expression)`[3]
+  upper2 <- append(upper2, u2)
+  
+
+  mod <- aov(expression ~ cluster, data = tegdata)
+  
+  sum <- summary(mod)
+  f <- sum[[1]][["F value"]][1]
+  FvalANOVA <- append(f, FvalANOVA)
+  p <- sum[[1]][["Pr(>F)"]][1]
+  PvalANOVA <- append(p, PvalANOVA)
+  
+  tukey <- TukeyHSD(mod)
+  tukeydf <- data.frame(tukey$cluster)
+  
+  u1_l1 <- tukeydf$p.adj[1]
+  Tukey_Pval_upper1_lower1<- append(Tukey_Pval_upper1_lower1, u1_l1)
+  u2_l1 <- tukeydf$p.adj[2]
+  Tukey_Pval_upper2_lower1 <- append(Tukey_Pval_upper2_lower1, u2_l1)
+  u2_u1 <- tukeydf$p.adj[3]
+  Tukey_Pval_upper2_upper1 <- append(Tukey_Pval_upper2_upper1, u2_u1)
+
+    #If varience isnt equal: Welch's anova 
+  k <- kruskal.test(expression ~ cluster, data = tegdata)
+  chi2 <- k[["statistic"]][["Kruskal-Wallis chi-squared"]]
+  KruskalWallis <- append(KruskalWallis, chi2)
+  pkw <- k[["p.value"]]
+  PvalKruskal <- append(PvalKruskal, pkw)
+  
+  w <- pairwise.wilcox.test(tegdata$expression, tegdata$cluster,
+                             p.adjust.method = "none", paired = FALSE)
+  wdf <- data.frame(w$p.value)
+  w_u1l1 <- wdf$lower1[1]
+  Wilcox_Pval_upper1_lower1 <- append(Wilcox_Pval_upper1_lower1, w_u1l1)
+  w_u2l1 <- wdf$lower1[2]
+  Wilcox_Pval_upper2_lower1 <- append(Wilcox_Pval_upper2_lower1, w_u2l1)
+  w_u2u1 <- wdf$upper1[2]
+  Wilcox_Pval_upper2_upper1 <- append(Wilcox_Pval_upper2_upper1, w_u2u1)
+}
+
+upper1 <- as.numeric(upper1)
+upper1 <- round(upper1, digits = 2)
+
+upper2 <- as.numeric(upper2)
+upper2 <- round(upper2, digits = 2)
+
+lower1 <- as.numeric(lower1)
+lower1 <- round(lower1, digits = 2)
+
+FvalANOVA<- as.numeric(FvalANOVA)
+FvalANOVA <- round(FvalANOVA, digits = 0)
+
+PvalANOVA<- as.numeric(PvalANOVA)
+PvalANOVA<- round(PvalANOVA, digits = 4)
+
+Tukey_Pval_upper1_lower1<- as.numeric(Tukey_Pval_upper1_lower1)
+Tukey_Pval_upper1_lower1<- round(Tukey_Pval_upper1_lower1, digits = 4)
+
+Tukey_Pval_upper2_lower1<- as.numeric(Tukey_Pval_upper2_lower1)
+Tukey_Pval_upper2_lower1<- round(Tukey_Pval_upper2_lower1, digits = 4)
+
+Tukey_Pval_upper2_upper1<- as.numeric(Tukey_Pval_upper2_upper1)
+Tukey_Pval_upper2_upper1<- round(Tukey_Pval_upper2_upper1, digits = 4)
+
+KruskalWallis<- as.numeric(KruskalWallis)
+KruskalWallis<- round(KruskalWallis, digits = 0)
+
+PvalKruskal<- as.numeric(PvalKruskal)
+PvalKruskal<- round(PvalKruskal, digits = 4)
+
+Wilcox_Pval_upper1_lower1<- as.numeric(Wilcox_Pval_upper1_lower1)
+Wilcox_Pval_upper1_lower1<- round(Wilcox_Pval_upper1_lower1, digits = 4)
+
+Wilcox_Pval_upper2_lower1<- as.numeric(Wilcox_Pval_upper2_lower1)
+Wilcox_Pval_upper2_lower1<- round(Wilcox_Pval_upper2_lower1, digits = 4)
+
+Wilcox_Pval_upper2_upper1<- as.numeric(Wilcox_Pval_upper2_upper1)
+Wilcox_Pval_upper2_upper1<- round(Wilcox_Pval_upper2_upper1, digits = 4)
+
+s_df2 <- rbind(names,
+              ids,
+              upper1,
+              upper2,
+              lower1,
+              FvalANOVA,
+              PvalANOVA,
+              Tukey_Pval_upper1_lower1,
+              Tukey_Pval_upper2_lower1,
+              Tukey_Pval_upper2_upper1,
+              KruskalWallis, 
+              PvalKruskal, 
+              Wilcox_Pval_upper1_lower1, 
+              Wilcox_Pval_upper2_lower1,
+              Wilcox_Pval_upper2_upper1)
+
+s_df2 <- data.frame(s_df2)
+s_df2<- rotate_df(s_df2)
+
+#write_xlsx(s_df2, "Tegcluster_stats_table.xlsx")
+
 ### RECLUSTER TEGUMENT 
 
 
@@ -413,7 +768,37 @@ head(Idents(seurat_teg), 5)
 #run UMAP
 seurat_teg <- RunUMAP(seurat_teg, dims = 1:25)
 #view
-DimPlot(seurat_teg, reduction = "umap", pt.size = 3) 
+DimPlot(seurat_teg, reduction = "umap", pt.size = 2)
+
+FeaturePlot(seurat_teg, features = 'Smp-051920',  slot = 'scale.data') + 
+  scale_colour_gradientn(colours = c("#ABD9E9", "#E0F3F8", "#FDAE61", "#F46D43", "#D73027"), breaks=c(-2,0,2,4,6,8,10),labels=c(-2,0,2,4,6,8,10),limits=c(-2,10), name = paste('Expression', '\n', 'Z-score')) +
+  labs(title = paste("nanos2","\n", "Smp-051920") )+
+  theme(plot.title = element_text(size=10))
+
+#SAVE PLOTS
+genes <- c('Smp-051920','Smp-105360','Smp-175590','Smp-045200','Smp-346900')
+names <- c('nanos-2','notch','fgfra','tal','sm25')
+stat <- cbind(genes, names)
+stat <- data.frame(stat)
+num <- 1:5
+#550 550
+for (i in num){
+  png(sprintf("%s.png", paste('reclusterteg', i)), width = 550, height = 550)
+  plot(FeaturePlot(seurat_teg, features = stat$genes[i],  slot = 'data', pt.size = 2) + 
+         labs(title = paste(stat$names[i],"\n", stat$genes[i]) )+
+         theme(plot.title = element_text(size=10)))
+  dev.off()
+} 
+
+for (i in num){
+  png(sprintf("%s.png", paste('reclustertegvln', i)), width = 850, height = 500)
+  plot(VlnPlot(seurat_teg, features = stat$genes[i], pt.size = 0.2) +
+         theme(legend.position = "none", plot.title = element_text(size=10))+
+         labs(title = paste(stat$names[i],"\n", stat$genes[i])))
+  dev.off()
+}
+#550 550
+
 
 #only run if you want to see how original clusters map to new clusters
 # c <- cluster_df$cell 
@@ -430,11 +815,17 @@ DimPlot(seurat_teg, reduction = "umap", pt.size = 3)
 # DimPlot(seurat_teg, reduction = "umap", pt.size = 3, group.by = "cluster" ) 
 
 
+write_xlsx(genestegflip, "genestegflip.xlsx") 
+
+
+genestegflipRCSD <- read.csv("genestegflipRCSD.csv")
+colnames(genestegflipRCSD) <- c('name', 'ID')
+
 
 #heatmap for tegument proteins on reclustered cells
 DoHeatmap(object = seurat_teg, features = genesteg$gene_ID, group.by = "seurat_clusters", assay = 'RNA', slot = "scale.data") +
   scale_fill_gradientn(colours = c('blue', 'black', 'orange')) +
-  scale_y_discrete(labels = genestegflip$protein)
+  scale_y_discrete(labels = genestegflipRCSD$name)
 
 #stats on recluster
 
@@ -456,7 +847,7 @@ sink(fileConn, append=TRUE)
 
 for (i in num){
   
-  n <- genesteg$tableName[i]
+  n <- genesteg$protein[i]
   id <- genesteg$gene_ID[i]
   
   print(paste('Stats for gene', n, id))
@@ -493,13 +884,12 @@ for (i in num){
   print(TukeyHSD(mod))
   
   #Check normality:
-  assign(paste("hist", i, sep = ''), as.ggplot(~hist(mod$residuals)))
+  assign(paste("hist", i, sep = ''), as.ggplot(~qqPlot(mod$residuals)))
   #Check equal varience:
   assign(paste("box", i, sep = ''), as.ggplot(~boxplot(expression ~ cluster, data = tegdata)))
   
   
   print("Non-parametric - Kruskal Wallis and unpaired Wilcox test:")
-  #If varience isnt equal: Welch's anova 
   print(kruskal.test(expression ~ cluster, data = tegdata))
   print(pairwise.wilcox.test(tegdata$expression, tegdata$cluster,
                              p.adjust.method = "none", paired = FALSE))
@@ -599,6 +989,120 @@ dev.off()
 png("recluster_statsplot_teg_22.png", width = 470, height = 800)
 plot(statplot$`22`)
 dev.off()
+## stats to table
+names <- list()
+ids <- list()
+FvalANOVA <- list()
+PvalANOVA <- list()
+KruskalWallis <- list()
+PvalKruskal <- list()
+o0 <- list()
+i1 <- list()
+ii2 <- list()
+iii3 <- list()
+iv4 <- list()
+v5 <- list()
+vi6 <- list()
+vii7 <- list()
+
+for (i in num){
+  
+  n <- genesteg$protein[i]
+  names <- append(names, n)
+  id <- genesteg$gene_ID[i]
+  ids <- append(ids, id)
+  
+  newdat2 <- dat2[id,]
+  cn2 <- colnames(newdat2)
+  setDT(newdat2, keep.rownames = TRUE)[]
+  tegcountdf <- pivot_longer(newdat2, cols = cn2, names_to = "cell")
+  colnames(tegcountdf) <- c('ID', 'cell', 'expression')
+  tegdata <- merge(tegcountdf, tegdf, by = 'cell')
+  
+  #Mean expression for each group:
+   m <- tegdata %>% 
+           group_by(cluster) %>% 
+           summarise(mean(expression))
+   
+
+   o <- m$`mean(expression)`[1]
+   o0 <- append(o0, o)
+   i <- m$`mean(expression)`[2]
+   i1 <- append(i1, i)
+   ii <- m$`mean(expression)`[3]
+   ii2 <- append(ii2, ii)
+   iii <- m$`mean(expression)`[4]
+   iii3 <- append(iii3, iii)
+   iv <- m$`mean(expression)`[5]
+   iv4 <- append(iv4, iv)
+   v <- m$`mean(expression)`[6]
+   v5 <- append(v5, v)
+   vi <- m$`mean(expression)`[7]
+   vi6 <- append(vi6, vi)
+   vii <- m$`mean(expression)`[8]
+   vii7 <- append(vii7, vii)
+   
+   
+   
+  # 
+
+  #Anova to compare expression across the three clusters:
+  mod <- aov(expression ~ cluster, data = tegdata)
+  #View anova:
+  sum <- summary(mod)
+  f <- sum[[1]][["F value"]][1]
+  FvalANOVA <- append(f, FvalANOVA)
+  p <- sum[[1]][["Pr(>F)"]][1]
+  PvalANOVA <- append(p, PvalANOVA)
+  
+  #tukey <- TukeyHSD(mod)
+  
+  #Check normality:
+  k <- kruskal.test(expression ~ cluster, data = tegdata)
+  chi2 <- k[["statistic"]][["Kruskal-Wallis chi-squared"]]
+  KruskalWallis <- append(KruskalWallis, chi2)
+  pkw <- k[["p.value"]]
+  PvalKruskal <- append(PvalKruskal, pkw)
+  
+  #w <- pairwise.wilcox.test(tegdata$expression, tegdata$cluster,
+  #                           p.adjust.method = "none", paired = FALSE)
+  
+  
+}
+
+FvalANOVA<- as.numeric(FvalANOVA)
+FvalANOVA <- round(FvalANOVA, digits = 0)
+
+PvalANOVA<- as.numeric(PvalANOVA)
+PvalANOVA<- round(PvalANOVA, digits = 4)
+
+KruskalWallis<- as.numeric(KruskalWallis)
+KruskalWallis<- round(KruskalWallis, digits = 0)
+
+PvalKruskal<- as.numeric(PvalKruskal)
+PvalKruskal<- round(PvalKruskal, digits = 4)
+
+
+
+s_df3 <- rbind(names,
+               ids,
+               FvalANOVA,
+               PvalANOVA,
+               KruskalWallis, 
+               PvalKruskal,
+               o0,
+               i1,
+               ii2,
+               iii3,
+               iv4,
+               v5,
+               vi6,
+               vii7)
+
+s_df3 <- data.frame(s_df3)
+s_df3<- rotate_df(s_df3)
+
+#write_xlsx(s_df3, "TegRecluster_stats_table.xlsx")
 #####
 
 #finds markers that disinguish the sub clusters from each other
